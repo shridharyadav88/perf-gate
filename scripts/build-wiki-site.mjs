@@ -11,6 +11,55 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const wikiRoot = path.join(repoRoot, "openwiki");
 const outDir = path.join(repoRoot, "docs");
+const visualizerIgnorePath = path.join(wikiRoot, ".visualizerignore");
+
+function parseIgnorePatterns(raw) {
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+}
+
+function matchesIgnore(id, patterns) {
+  const normalized = id.replace(/\\/g, "/");
+  return patterns.some((pattern) => {
+    if (pattern.endsWith("/")) {
+      return normalized.startsWith(pattern) || normalized.includes(`/${pattern}`);
+    }
+    if (pattern.includes("*")) {
+      const regex = new RegExp(
+        `^${pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*")}$`,
+      );
+      return regex.test(normalized);
+    }
+    return normalized === pattern || normalized.endsWith(`/${pattern}`);
+  });
+}
+
+function filterGraph(graph, patterns) {
+  if (patterns.length === 0) {
+    return graph;
+  }
+  const nodes = graph.nodes.filter((node) => !matchesIgnore(node.id, patterns));
+  const ids = new Set(nodes.map((node) => node.id));
+  const edges = graph.edges.filter(
+    (edge) => ids.has(edge.source) && ids.has(edge.target),
+  );
+  for (const node of nodes) {
+    node.links = node.links.filter((target) => ids.has(target));
+    node.backlinks = node.backlinks.filter((source) => ids.has(source));
+  }
+  return { ...graph, nodes, edges };
+}
+
+async function loadVisualizerIgnorePatterns() {
+  try {
+    const raw = await readFile(visualizerIgnorePath, "utf8");
+    return parseIgnorePatterns(raw);
+  } catch {
+    return [];
+  }
+}
 
 async function resolveOpenWikiDist() {
   const candidates = [];
@@ -55,7 +104,8 @@ async function main() {
     pathToFileURL(path.join(visualizeDist, "page.js")).href
   );
 
-  const graph = await buildGraph(wikiRoot);
+  const ignorePatterns = await loadVisualizerIgnorePatterns();
+  const graph = filterGraph(await buildGraph(wikiRoot), ignorePatterns);
   await mkdir(outDir, { recursive: true });
 
   let clientJs = await readFile(path.join(visualizeDist, "client.js"), "utf8");

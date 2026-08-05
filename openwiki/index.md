@@ -12,4 +12,3 @@ okf_version: "0.1"
 - [architecture](architecture/)
 - [package](package/)
 - [skills](skills/)
-- [workflow](workflow/)

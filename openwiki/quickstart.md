@@ -19,8 +19,6 @@ tags: [quickstart, navigation, project-code-optimization]
 - [Line profiler](skills/code-optimizer/line-profile.md) — signature synthesis, `LineProfiler`, explicit JSON arguments, fallback, and graceful failure.
 - [Optimization reporting](skills/code-optimizer/reporting.md) — report metadata, diagnostics, quality gate, comparison, and verdict schema.
 - [Testing and validation](testing-and-validation.md) — focused tests, build checks, artifact validation, and dependency boundaries.
-- [OpenWiki operations](workflow/operations.md) — automated documentation workflow, permissions, provider configuration, and PR generation.
-- [Connector extension boundary](workflow/connector-boundary.md) — external OpenWiki connector contract, explicitly not implemented by this Python package.
 
 ## First-use path
 
@@ -56,7 +54,6 @@ Use `--call-args '[1000, {"mode": "strict"}]'` for explicit line-profiler positi
 | Change synthetic line-profiler calls | [Line profiler](skills/code-optimizer/line-profile.md) | `run_line_profile.py:synthesize_arguments`, `run_line_profile` | `TestLineProfiler`, `TestSynthesizeArguments` | `pytest -q tests/test_profiling_scripts.py -k 'LineProfiler or SynthesizeArguments'` |
 | Change agent phases or report evidence | [Skill overview](skills/code-optimizer/overview.md) and [reporting](skills/code-optimizer/reporting.md) | `SKILL.md`, `report_template.md` | Skill behavior is agent-facing; preserve package tests | `pytest -q` plus a representative agent run |
 | Change distribution/build behavior | [Registry and packaging](package/registry-and-packaging.md) | `pyproject.toml`, `src/project_code_optimization.egg-info/` generated contracts | CLI resource-layout test | `python3 -m build`; install wheel in a clean environment |
-| Change documentation automation | [OpenWiki operations](workflow/operations.md) | `.github/workflows/openwiki-update.yml` | Workflow run / PR review | Validate YAML and run the workflow with configured secrets |
 
 ## Safe-change checklist
 
@@ -68,4 +65,4 @@ Use `--call-args '[1000, {"mode": "strict"}]'` for explicit line-profiler positi
 
 ## Scope and backlog
 
-No repository component is intentionally deferred. The connector page is a scope boundary only: connector implementation belongs to the external OpenWiki TypeScript repository and `/skills/write-connector/SKILL.md`, not this package. The built-artifact resource check is a validation recipe rather than a checked-in test; add it to CI if distribution regressions become a recurring risk.
+No repository component is intentionally deferred. The built-artifact resource check is a validation recipe rather than a checked-in test; add it to CI if distribution regressions become a recurring risk.

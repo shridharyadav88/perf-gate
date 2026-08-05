@@ -1,0 +1,2 @@
+# Exclude from the interactive wiki graph (local visualize + GitHub Pages build).
+workflow/
