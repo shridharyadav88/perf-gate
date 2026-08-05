@@ -40,10 +40,10 @@ jobs:
         run: node scripts/build-wiki-site.mjs
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@56afc609e14203612a9e19a5000ea9b906a5ae16 # v3
+        uses: actions/upload-pages-artifact@v3
         with:
           path: docs
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@d6db9015920f08890bd3831492f0a177517ed7a9 # v4
+        uses: actions/deploy-pages@v4
