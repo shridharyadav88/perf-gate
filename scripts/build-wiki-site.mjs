@@ -72,8 +72,13 @@ async function main() {
 `,
   );
 
+  let pageHtml = PAGE.replace(
+    'src="/client.js"',
+    'src="./client.js"',
+  );
+
   await writeFile(path.join(outDir, "graph.json"), JSON.stringify(graph));
-  await writeFile(path.join(outDir, "index.html"), PAGE);
+  await writeFile(path.join(outDir, "index.html"), pageHtml);
   await writeFile(path.join(outDir, "client.js"), clientJs);
   await cp(path.join(visualizeDist, "client-lib.js"), path.join(outDir, "client-lib.js"));
 
