@@ -15,6 +15,24 @@ loops.
 
 ---
 
+## Interactive Wiki
+
+Explore the full project architecture as an interactive node graph — click any
+node to read the linked documentation with live Mermaid diagrams.
+
+**[Open the wiki visualizer →](https://shridharyadav88.github.io/project-code-optimization/)**
+
+[![OpenWiki architecture graph](docs/assets/openwiki-architecture.png)](https://shridharyadav88.github.io/project-code-optimization/)
+
+Run locally with live reload while editing docs:
+
+```bash
+npm install -g openwiki
+openwiki visualize openwiki
+```
+
+---
+
 ## Quick Start
 
 ```bash
