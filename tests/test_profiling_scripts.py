@@ -40,6 +40,10 @@ load_module = _big_o_mod.load_module
 run_line_profile = _line_mod.run_line_profile
 synthesize_arguments = _line_mod.synthesize_arguments
 load_function = _line_mod.load_function
+compute_line_stats = _line_mod.compute_line_stats
+
+big_o_main = _big_o_mod.main
+line_profile_main = _line_mod.main
 
 
 # ---------------------------------------------------------------------------
@@ -206,3 +210,148 @@ class TestSynthesizeArguments:
         # Should produce args for both 'a' and 'b' (typed as int → 0 each)
         result = func(*args, **kwargs)
         assert result == 0  # 0 + 0
+
+
+# ---------------------------------------------------------------------------
+# compute_line_stats (structured hotspot data used by multi-target scans)
+# ---------------------------------------------------------------------------
+
+class TestComputeLineStats:
+    def test_returns_formatted_and_hotspots(self, linear_func_file):
+        func = load_function(str(linear_func_file), "f")
+        stats = compute_line_stats(func)
+        assert "=== LINE PROFILER OUTPUT ===" in stats["formatted"]
+        assert stats["total_hits"] > 0
+        assert len(stats["hotspots"]) > 0
+        top = stats["hotspots"][0]
+        assert {"line", "hits", "time_us", "pct_time", "source"} <= top.keys()
+
+    def test_hotspots_sorted_by_time_descending(self, linear_func_file):
+        func = load_function(str(linear_func_file), "f")
+        stats = compute_line_stats(func)
+        times = [h["time_us"] for h in stats["hotspots"]]
+        assert times == sorted(times, reverse=True)
+
+    def test_failure_reports_error_and_no_hotspots(self, raising_func_file):
+        func = load_function(str(raising_func_file), "crash")
+        stats = compute_line_stats(func)
+        assert stats["hotspots"] == []
+        assert stats["total_hits"] == 0
+        assert "error" in stats
+        assert "=== LINE PROFILER OUTPUT ===" in stats["formatted"]
+
+
+# ---------------------------------------------------------------------------
+# Multi-target CLI (--target-type file/files/commit/repo)
+# ---------------------------------------------------------------------------
+
+class TestBigOMultiTarget:
+    def test_target_type_file_profiles_every_function(self, tmp_path: Path, capsys):
+        mod = tmp_path / "mod.py"
+        mod.write_text(
+            "def linear(xs):\n"
+            "    return [x for x in xs]\n"
+            "\n"
+            "def quad(xs):\n"
+            "    return [x for x in xs for y in xs]\n"
+        )
+        big_o_main([
+            "--target-type", "file", "--file", str(mod),
+            "--min-n", "50", "--max-n", "5000", "--n-measures", "6",
+        ])
+        out = capsys.readouterr().out
+        assert "BIG-O BASELINE SCAN (file)" in out
+        assert "linear" in out
+        assert "quad" in out
+        assert "Severity:" in out
+        # The quadratic function must be reported ahead of the linear one.
+        assert out.index("quad") < out.index("linear")
+
+    def test_target_type_file_missing_raises_exit_1(self, capsys):
+        with pytest.raises(SystemExit) as excinfo:
+            big_o_main(["--target-type", "file", "--file", "/nonexistent/mod.py"])
+        assert excinfo.value.code == 1
+        assert "Error:" in capsys.readouterr().err
+
+    def test_function_target_missing_args_exit_2(self, capsys):
+        with pytest.raises(SystemExit) as excinfo:
+            big_o_main(["--target-type", "function"])
+        assert excinfo.value.code == 2
+        assert "requires --file and --func" in capsys.readouterr().err
+
+    def test_target_with_broken_function_reports_error_not_abort(self, tmp_path: Path, capsys):
+        mod = tmp_path / "mod.py"
+        mod.write_text(
+            "def ok_func(xs):\n"
+            "    return len(xs)\n"
+            "\n"
+            "def crash_func(xs):\n"
+            "    raise RuntimeError('boom')\n"
+        )
+        big_o_main([
+            "--target-type", "file", "--file", str(mod),
+            "--min-n", "20", "--max-n", "200", "--n-measures", "4",
+        ])
+        out = capsys.readouterr().out
+        assert "crash_func" in out
+        assert "ok_func" in out
+        assert "Error: Big-O profiling failed" in out
+
+    def test_target_with_broken_import_reports_error_not_abort(self, tmp_path: Path, capsys):
+        # A relative import with no package context (a real failure mode for
+        # files loaded standalone from a larger package) must not crash the
+        # whole scan — it must be reported and the run must continue.
+        mod = tmp_path / "mod.py"
+        mod.write_text(
+            "from . import nonexistent_sibling\n"
+            "\n"
+            "def unreachable(xs):\n"
+            "    return xs\n"
+        )
+        big_o_main(["--target-type", "file", "--file", str(mod)])
+        out = capsys.readouterr().out
+        assert "unreachable" in out
+        assert "Error:" in out
+        assert "Severity: Unknown" in out
+
+
+class TestLineProfileMultiTarget:
+    def test_target_type_file_profiles_every_function(self, tmp_path: Path, capsys):
+        mod = tmp_path / "mod.py"
+        mod.write_text(
+            "def f(xs):\n"
+            "    return [x for x in xs]\n"
+            "\n"
+            "def g(xs):\n"
+            "    return [x for x in xs]\n"
+        )
+        line_profile_main(["--target-type", "file", "--file", str(mod)])
+        out = capsys.readouterr().out
+        assert "LINE PROFILE BASELINE SCAN (file)" in out
+        assert "f" in out and "g" in out
+        assert "Top hotspot:" in out
+
+    def test_target_type_file_missing_raises_exit_1(self, capsys):
+        with pytest.raises(SystemExit) as excinfo:
+            line_profile_main(["--target-type", "file", "--file", "/nonexistent/mod.py"])
+        assert excinfo.value.code == 1
+        assert "Error:" in capsys.readouterr().err
+
+    def test_function_target_missing_args_exit_2(self, capsys):
+        with pytest.raises(SystemExit) as excinfo:
+            line_profile_main(["--target-type", "function"])
+        assert excinfo.value.code == 2
+        assert "requires --file and --func" in capsys.readouterr().err
+
+    def test_target_with_broken_import_reports_error_not_abort(self, tmp_path: Path, capsys):
+        mod = tmp_path / "mod.py"
+        mod.write_text(
+            "from . import nonexistent_sibling\n"
+            "\n"
+            "def unreachable(xs):\n"
+            "    return xs\n"
+        )
+        line_profile_main(["--target-type", "file", "--file", str(mod)])
+        out = capsys.readouterr().out
+        assert "unreachable" in out
+        assert "Error:" in out
