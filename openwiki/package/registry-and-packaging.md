@@ -25,6 +25,6 @@ The generated `src/project_code_optimization.egg-info/entry_points.txt` records 
 
 ## Artifact verification
 
-`python3 -m build` should produce the wheel and sdist under `dist/`. Validate the built wheel in a clean environment rather than relying only on source-tree tests: install the wheel, import `project_code_optimization`, resolve `importlib.resources.files("project_code_optimization") / "skills"`, and assert that `SKILL.md`, `scripts/run_big_o.py`, `scripts/run_line_profile.py`, and `templates/report_template.md` exist. Run `install-agent-skills --target <temporary-directory>` and verify the copied tree and console script. This catches missing package-data declarations that `tests/test_cli.py` can miss when importing the checkout.
+`python3 -m build` should produce the wheel and sdist under `dist/`. Validate the built wheel in a clean environment rather than relying only on source-tree tests: install the wheel, import `project_code_optimization`, resolve `importlib.resources.files("project_code_optimization") / "skills"`, and assert that `SKILL.md`, `scripts/profilers/run_big_o.py`, `scripts/profilers/run_line_profile.py`, and `templates/report_template.md` exist. Run `install-agent-skills --target <temporary-directory>` and verify the copied tree and console script. This catches missing package-data declarations that `tests/test_cli.py` can miss when importing the checkout.
 
 See [testing and validation](../testing-and-validation.md) for the narrow commands and [installer](installer.md) for resource consumption.

@@ -7,7 +7,7 @@ tags: [profiling, big-o, cli, diagnostics]
 
 # Big-O profiling
 
-`skills/code-optimizer/scripts/run_big_o.py` exposes `load_module(file_path)`, `profile_big_o(func, min_n=100, max_n=10000, n_measures=8)`, `format_output(best_fit, fitted)`, and `main(argv)`. The script dynamically loads a target Python file under `_big_o_target_module`, resolves the requested function, and delegates empirical fitting to `big_o.big_o`.
+`skills/code-optimizer/scripts/profilers/run_big_o.py` exposes `load_module(file_path)`, `profile_big_o(func, min_n=100, max_n=10000, n_measures=8)`, `format_output(best_fit, fitted)`, and `main(argv)`. The script dynamically loads a target Python file under `_big_o_target_module`, resolves the requested function, and delegates empirical fitting to `big_o.big_o`.
 
 ## Data and fitting contract
 
@@ -18,7 +18,7 @@ The formatter emits `=== BIG-O PROFILER OUTPUT ===`, `Estimated Complexity:`, an
 ## Usage and limitations
 
 ```bash
-python3 .agents/skills/code-optimizer/scripts/run_big_o.py \
+python3 .agents/skills/code-optimizer/scripts/profilers/run_big_o.py \
   --file src/my_module.py --func process_records \
   --min-n 100 --max-n 10000 --n-measures 8
 ```

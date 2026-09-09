@@ -21,7 +21,7 @@ The profiling tests use temporary synthetic Python modules, so they exercise beh
 - Lint: `ruff check .`
 - Build: `python3 -m build`
 
-For a packaging change, install the newly built wheel into a clean temporary environment and verify the console script plus all four deployed assets: `SKILL.md`, `scripts/run_big_o.py`, `scripts/run_line_profile.py`, and `templates/report_template.md`. Also inspect `dist/` and the generated `src/project_code_optimization.egg-info/SOURCES.txt` and `entry_points.txt`; these are generated contracts that reveal omitted package data or a stale console entry point. Source-tree tests alone can pass even if a wheel omits resources.
+For a packaging change, install the newly built wheel into a clean temporary environment and verify the console script plus all four deployed assets: `SKILL.md`, `scripts/profilers/run_big_o.py`, `scripts/profilers/run_line_profile.py`, and `templates/report_template.md`. Also inspect `dist/` and the generated `src/project_code_optimization.egg-info/SOURCES.txt` and `entry_points.txt`; these are generated contracts that reveal omitted package data or a stale console entry point. Source-tree tests alone can pass even if a wheel omits resources.
 
 ## Validation boundaries
 

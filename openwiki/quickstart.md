@@ -35,9 +35,9 @@ The default target is `<cwd>/.agents/skills`; use `--target PATH` for another de
 To profile a target after deployment:
 
 ```bash
-python3 .agents/skills/code-optimizer/scripts/run_big_o.py \
+python3 .agents/skills/code-optimizer/scripts/profilers/run_big_o.py \
   --file src/my_module.py --func process_records
-python3 .agents/skills/code-optimizer/scripts/run_line_profile.py \
+python3 .agents/skills/code-optimizer/scripts/profilers/run_line_profile.py \
   --file src/my_module.py --func process_records
 pytest
 ```

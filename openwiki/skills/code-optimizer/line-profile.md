@@ -7,7 +7,7 @@ tags: [profiling, line-profiler, cli, diagnostics]
 
 # Line profiling
 
-`skills/code-optimizer/scripts/run_line_profile.py` exposes `load_function(file_path, func_name)`, `synthesize_arguments(func)`, `run_line_profile(func, args=None, kwargs=None)`, and `main(argv)`. It dynamically loads a target module, resolves a callable, instruments it with `line_profiler.LineProfiler`, executes one guarded call, and returns formatted statistics.
+`skills/code-optimizer/scripts/profilers/run_line_profile.py` exposes `load_function(file_path, func_name)`, `synthesize_arguments(func)`, `run_line_profile(func, args=None, kwargs=None)`, and `main(argv)`. It dynamically loads a target module, resolves a callable, instruments it with `line_profiler.LineProfiler`, executes one guarded call, and returns formatted statistics.
 
 ## Synthetic argument policy
 
