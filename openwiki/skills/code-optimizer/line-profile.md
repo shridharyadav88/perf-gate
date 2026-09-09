@@ -17,6 +17,8 @@ tags: [profiling, line-profiler, cli, diagnostics]
 
 The CLI accepts `--file`, `--func`, and optional `--call-args`. JSON arrays become positional arguments and objects become keyword arguments. A valid scalar or other non-list/non-dict JSON value is decoded but ignored, leaving empty positional and keyword arguments; it does not produce a JSON error. Malformed JSON prints `Error: Invalid JSON for --call-args: <decoder error>` to stderr and exits 1. Unresolved files/functions are likewise reported on stderr with exit status 1. Supplying `--call-args` bypasses automatic signature synthesis; omitted `--call-args` passes initialized empty tuples/dicts to `run_line_profile`, whose `args is not None` branch therefore also bypasses synthesis at the CLI boundary.
 
+The CLI also accepts the same `--target-type`/`--file`/`--files`/`--commit`/`--repo`/`--max-targets`/`--timeout`/`--dry-run` flags as [Big-O profiling](big-o.md), resolving targets through `profilers/target_resolution.py`. Multi-target output is sorted by total measured time (not just hotspot concentration) and one broken target becomes an error row rather than aborting the scan. Each profiled call runs under the per-target `--timeout` budget (default 120s) via `timeouts.run_with_timeout`; a timeout breach is returned as the error (no fallback — retrying a hung call cannot help) and the worker thread is abandoned, not killed. `measure_verdict_us(func, timeout, repeats)` is the `time.perf_counter` min-of-repeats path used by [apply_and_verify](resolvers.md) for keep/revert verdicts.
+
 ```mermaid
 flowchart TD
     Load["load_function resolves callable"] --> Args{"Explicit args supplied?"}

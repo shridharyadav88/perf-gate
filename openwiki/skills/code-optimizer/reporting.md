@@ -7,7 +7,13 @@ tags: [reporting, template, optimization, quality-gate]
 
 # Optimization report contract
 
-`skills/code-optimizer/templates/report_template.md` is a fill-in template, not executable code. The agent must retain every section and replace placeholders with the current run's evidence; absent data is `N/A`.
+The skill ships three report surfaces; the agent picks the one that fits the request:
+
+- `skills/code-optimizer/templates/report_template.md` — the original fill-in before/after template for a single targeted optimization run.
+- `skills/code-optimizer/templates/baseline_report_template.md` — for baseline-only assessments (no refactor), where every finding is listed most-severe to least-severe using the same complexity-rank-then-hotspot-magnitude criteria the scripts use to order multi-target output.
+- `generate_baseline_csv.py` — a CSV (one row per resolved function, pre-sorted most-to-least severe) when the goal is ranked findings as data rather than prose. Columns: `rank, severity, file, function, empirical_big_o, complexity_rank, big_o_error, total_hits, total_hotspot_time_us, top_hotspot_pct_time, top_hotspot_line, top_hotspot_source, line_profile_error`. See [pipeline](pipeline.md).
+
+Each is a fill-in template or deterministic emitter, not executable code. The agent must retain every section and replace placeholders with the current run's evidence; absent data is `N/A`.
 
 ## Required evidence
 

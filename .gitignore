@@ -10,3 +10,7 @@ __pycache__/
 # Local profiling / recall run artifacts
 *.prof
 *.backup*
+.env
+# openwiki recreates this generator-owned stub (byte-identical to
+# AGENTS.md) on every run; keep it out of history
+CLAUDE.md
