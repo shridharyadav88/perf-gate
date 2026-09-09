@@ -9,8 +9,9 @@ reports/2026-09-02-pdf-utils-baseline.md) — moving it to module scope is
 always correct, so it's safe to detect and apply without an LLM in the loop.
 
 Detection is pure/read-only (this module never writes a file) so it can be
-shared by `classify_findings.py` (read-only triage) and `apply_regex_hoist.py`
-(the actual codemod) without duplicating the analysis logic.
+shared by `classify_findings.py` (read-only triage) and
+`resolvers/apply_regex_hoist.py` (the actual codemod) without duplicating the
+analysis logic.
 """
 
 from __future__ import annotations

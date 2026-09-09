@@ -26,7 +26,9 @@ def _load_module(name: str, rel_path: str):
     return module
 
 
-_tr = _load_module("_test_target_resolution", "code-optimizer/scripts/target_resolution.py")
+_tr = _load_module(
+    "_test_target_resolution", "code-optimizer/scripts/profilers/target_resolution.py"
+)
 
 resolve_targets = _tr.resolve_targets
 discover_functions = _tr.discover_functions

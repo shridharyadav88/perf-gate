@@ -1,0 +1,88 @@
+# Example CI gates for the code-optimizer skill (GitHub Actions).
+#
+# POLICY (fail-closed in CI, per the gate contract):
+#   * any gate finding with status "fail"            -> build fails (exit 1)
+#   * any gate harness error                         -> build fails (exit 2:
+#     a silently-passing broken gate is worse than no gate)
+#   * "skipped" findings are never failures.
+#   * static-audit policy below fails only on findings INTRODUCED by the
+#     change (fingerprint diff), so legacy codebases can adopt the gate
+#     on day one without boiling the ocean.
+#
+# THRESHOLD (memory) is one uncalibrated starting point: --max-growth 0.02
+# universal. Ground it with the p95-of-clean-builds procedure in SKILL.md.
+# `memray` / `py-spy` are OPTIONAL integrations -- documented in SKILL.md,
+# intentionally absent here; the built-in path is tracemalloc + line_profiler.
+name: performance-gates
+
+on:
+  pull_request:
+
+jobs:
+  static-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Audit changed files (advisory list, strict diff)
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only "$BASE"...HEAD -- '*.py' | tr '\n' ' ')
+          if [ -z "$CHANGED" ]; then echo "no Python changes"; exit 0; fi
+          SKILL=.agents/skills/code-optimizer
+          # Full hint lists for the log (advisory)...
+          python3 "$SKILL/scripts/detectors/static_audit.py" --files $CHANGED
+          # ...but the gate compares fingerprint SETS: only newly introduced
+          # findings fail the build. Persist base fingerprints as an artifact
+          # in your own workflow to diff against (sketch):
+          # python3 "$SKILL/scripts/detectors/static_audit.py" --json --files $CHANGED \
+          #   | jq -r '.[].fingerprint' | sort > new_fps.txt
+          # comm -23 new_fps.txt base_fps.txt > introduced.txt
+          # test ! -s introduced.txt
+
+  concurrency-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: GIL / parallelism audit
+        run: |
+          python3 .agents/skills/code-optimizer/scripts/profilers/concurrency.py --json
+
+  memory-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Heap-growth ceiling
+        run: |
+          # Wire BASE/CURRENT to your own measured bytes (e.g. tracemalloc
+          # snapshots via profilers/memory.py helpers around the test run).
+          # The gate fails closed on breach (1) and on harness error (2).
+          python3 .agents/skills/code-optimizer/scripts/profilers/memory.py \
+            --baseline "$BASE_BYTES" --current "$CURRENT_BYTES" \
+            --max-growth 0.02
+
+  baseline-classify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Baseline CSV + tier dispatch
+        run: |
+          SKILL=.agents/skills/code-optimizer
+          python3 "$SKILL/scripts/generate_baseline_csv.py" \
+            --target-type repo --repo . --output baseline.csv
+          # Fails closed (exit 2) on missing/stale provenance or schema drift.
+          python3 "$SKILL/scripts/classify_findings.py" \
+            --input baseline.csv --output classified.csv

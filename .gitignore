@@ -7,3 +7,6 @@ __pycache__/
 .venv/
 .agents/
 .DS_Store
+# Local profiling / recall run artifacts
+*.prof
+*.backup*

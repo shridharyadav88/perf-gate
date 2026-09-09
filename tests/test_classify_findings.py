@@ -44,6 +44,19 @@ def _base_row(**overrides) -> dict:
     return row
 
 
+def _write_input_csv(path: Path, fieldnames: list, row: dict) -> None:
+    """Write a classify input CSV including the W7 provenance preamble.
+
+    Since schema versioning landed, the classifier fails closed on inputs
+    without provenance -- fixtures must carry it like real producer output.
+    """
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        fh.write("# schema_version=1\n")
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow(row)
+
+
 class TestTier0Detection:
     def test_hoistable_regex_wins_over_everything_else(self, tmp_path: Path):
         mod = _write(
@@ -109,8 +122,11 @@ class TestTier0Detection:
 class TestTier2Detection:
     def test_high_complexity_rank_routes_to_tier2(self, tmp_path: Path):
         mod = _write(tmp_path, "mod.py", "def f(xs):\n    return [x for x in xs]\n")
+        # Rank 4 (quadratic) is the fit-flap zone: it escalates only with
+        # independent confirming measurements (W9 hysteresis).
         row = _base_row(
             file=str(mod), function="f", empirical_big_o="Quadratic", complexity_rank="4",
+            confirmations="2",
         )
         classify_rows([row])
         assert row["tier"] == "tier2_algorithmic"
@@ -163,32 +179,32 @@ class TestCLI:
         )
         in_csv = tmp_path / "in.csv"
         fieldnames = list(_base_row().keys())
-        with open(in_csv, "w", newline="", encoding="utf-8") as fh:
-            writer = csv.DictWriter(fh, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerow(_base_row(file=str(mod), function="f"))
+        _write_input_csv(in_csv, fieldnames, _base_row(file=str(mod), function="f"))
 
         out_csv = tmp_path / "out.csv"
         main(["--input", str(in_csv), "--output", str(out_csv)])
 
         with open(out_csv, newline="", encoding="utf-8") as fh:
-            rows = list(csv.DictReader(fh))
+            body = "".join(
+                line for line in fh if not line.lstrip().startswith("#")
+            )
+            rows = list(csv.DictReader(io.StringIO(body)))
         assert rows[0]["tier"] == "tier0_regex_hoist"
 
     def test_stdout_output(self, tmp_path: Path, capsys):
         mod = _write(tmp_path, "mod.py", "def f(xs):\n    return sorted(xs)\n")
         in_csv = tmp_path / "in.csv"
         fieldnames = list(_base_row().keys())
-        with open(in_csv, "w", newline="", encoding="utf-8") as fh:
-            writer = csv.DictWriter(fh, fieldnames=fieldnames)
-            writer.writeheader()
-            row = _base_row(
-                file=str(mod), function="f", empirical_big_o="Linear", complexity_rank="2",
-            )
-            writer.writerow(row)
+        row = _base_row(
+            file=str(mod), function="f", empirical_big_o="Linear", complexity_rank="2",
+        )
+        _write_input_csv(in_csv, fieldnames, row)
 
         main(["--input", str(in_csv)])
         out = capsys.readouterr().out
-        reader = csv.DictReader(io.StringIO(out))
+        body = "\n".join(
+            line for line in out.splitlines() if not line.lstrip().startswith("#")
+        )
+        reader = csv.DictReader(io.StringIO(body))
         rows = list(reader)
         assert rows[0]["tier"] == "tier1_review"

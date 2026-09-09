@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers to load core functions from the bundled scripts
 # ---------------------------------------------------------------------------
@@ -29,8 +28,12 @@ def _load_module(name: str, rel_path: str):
     return module
 
 
-_big_o_mod = _load_module("_test_big_o", "code-optimizer/scripts/run_big_o.py")
-_line_mod = _load_module("_test_line_profile", "code-optimizer/scripts/run_line_profile.py")
+_big_o_mod = _load_module(
+    "_test_big_o", "code-optimizer/scripts/profilers/run_big_o.py"
+)
+_line_mod = _load_module(
+    "_test_line_profile", "code-optimizer/scripts/profilers/run_line_profile.py"
+)
 
 
 profile_big_o = _big_o_mod.profile_big_o
@@ -41,6 +44,7 @@ run_line_profile = _line_mod.run_line_profile
 synthesize_arguments = _line_mod.synthesize_arguments
 load_function = _line_mod.load_function
 compute_line_stats = _line_mod.compute_line_stats
+measure_verdict_us = _line_mod.measure_verdict_us
 
 big_o_main = _big_o_mod.main
 line_profile_main = _line_mod.main
@@ -241,6 +245,29 @@ class TestComputeLineStats:
         assert "=== LINE PROFILER OUTPUT ===" in stats["formatted"]
 
 
+class TestMeasureVerdict:
+    def test_returns_plain_call_microseconds(self, linear_func_file):
+        func = load_function(str(linear_func_file), "f")
+        value = measure_verdict_us(func, timeout=60.0)
+        assert isinstance(value, float)
+        assert 0.0 <= value < 60.0 * 1e6
+
+    def test_takes_minimum_across_repeats(self, linear_func_file, monkeypatch):
+        # Scripted clock: three repeats of 50ms, 20ms, 90ms -- the
+        # verdict must be the 20ms minimum, proving noise rejection.
+        ticks = iter([100.0, 100.05, 100.05, 100.07, 100.07, 100.16])
+        monkeypatch.setattr(
+            _line_mod.time, "perf_counter", lambda: next(ticks))
+        func = load_function(str(linear_func_file), "f")
+        assert measure_verdict_us(func, timeout=60.0,
+                                  repeats=3) == pytest.approx(20000.0)
+
+    def test_unrunnable_callable_raises(self, raising_func_file):
+        func = load_function(str(raising_func_file), "crash")
+        with pytest.raises(RuntimeError):
+            measure_verdict_us(func, timeout=60.0, repeats=1)
+
+
 # ---------------------------------------------------------------------------
 # Multi-target CLI (--target-type file/files/commit/repo)
 # ---------------------------------------------------------------------------
@@ -355,3 +382,30 @@ class TestLineProfileMultiTarget:
         out = capsys.readouterr().out
         assert "unreachable" in out
         assert "Error:" in out
+
+
+class TestExecuteProfiledRobustness:
+    def test_unhashable_args_with_range_do_not_crash(self):
+        # A synthesized container arg (list) next to a range arg used to
+        # abort the candidate-shape search with TypeError: unhashable
+        # type -- killing the whole sweep instead of one row (crawl4ai v5).
+        def f(items, n):
+            return len(items) + n
+
+        lp, error = _line_mod._execute_profiled(f, ([1, 2], range(4)), {}, 30)
+        assert error is None
+        assert lp is not None
+
+    def test_click_command_reports_by_design_not_junk_probe(self):
+        # Click Command/Group objects (found by their module-level def
+        # name) are argv-driven entry points: report the by-design lane
+        # instead of probing junk argv shapes (real noise on crawl4ai
+        # cli.py: "<Command list> (*args bundle: 'int' object is not
+        # iterable)"). Duck-typed so the test needs no click install.
+        class FakeCommand:
+            name = 'serve'
+            callback = staticmethod(lambda: None)
+            params = []
+
+        with pytest.raises(ValueError, match='CLI command'):
+            _big_o_mod._build_adapter(FakeCommand())

@@ -1,0 +1,53 @@
+# Example regression gate for the code-optimizer skill (GitHub Actions).
+#
+# POLICY (two-level, per the gate contract):
+#   * complexity-class degradation (Linear -> Quadratic) or a newly
+#     introduced tier0/tier2 finding  -> build fails (exit 1)
+#   * wall-clock hotspot drift beyond --margin is ADVISORY by default
+#     (timers are noisy and CI runners vary); promote with --strict-time
+#     only on a pinned runner.
+#   * unreadable input or a missing tier column -> build fails (exit 2:
+#     a silently-passing broken gate is worse than no gate).
+#
+# The compared CSVs come from fixed workloads (same target files, same
+# flags), not whole-repo sweeps: re-profile the tracked scope on base
+# and on the PR, then diff. Persist the base classified CSV as a CI
+# artifact to compare against.
+name: performance-regression
+
+on:
+  pull_request:
+
+jobs:
+  regression-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Profile tracked scope on base and head
+        run: |
+          SKILL=.agents/skills/code-optimizer
+          # Tracked scope: the files whose performance you gate (start with
+          # one hot file; widen once the lane is green).
+          SCOPE="src/hot/path.py"
+          # Fresh CI checkouts make stash safe here; never run this dance
+          # in a dirty developer tree (paths must match for the join, so
+          # both profiles run in this same checkout).
+          git stash -q
+          python3 "$SKILL/scripts/generate_baseline_csv.py" \
+            --target-type files --files "$SCOPE" --output base.csv
+          python3 "$SKILL/scripts/classify_findings.py" \
+            --input base.csv --output base_classified.csv
+          git stash pop -q
+          python3 "$SKILL/scripts/generate_baseline_csv.py" \
+            --target-type files --files "$SCOPE" --output head.csv
+          python3 "$SKILL/scripts/classify_findings.py" \
+            --input head.csv --output head_classified.csv
+      - name: Regression gate (class + findings fail, time advises)
+        run: |
+          python3 .agents/skills/code-optimizer/scripts/regression_gate.py \
+            --baseline base_classified.csv --current head_classified.csv

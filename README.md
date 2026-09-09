@@ -1,13 +1,27 @@
 # project-code-optimization
 
-Enterprise-grade Agent Skills package for automated Python Big-O profiling,
-line-by-line operation-hit profiling, and corrective unit-test verification
-loops.
+Enterprise-grade Agent Skills package for deterministic Python performance
+work: empirical Big-O profiling, line-by-line hotspot profiling, measured
+cProfile heat ranking, mechanical tier0 fixes with keep-or-revert
+verification, and CI regression gates — stdlib only, zero tokens.
 
 - **Empirical Big-O curve fitting** via `big-O`
 - **Line-by-line operation profiling** via `line_profiler`
-- **Quality-gated optimization loop** — refactor → test → re-profile (max 3
-  attempts)
+- **Execution pipeline** — `generate_baseline_csv.py` → classifier →
+  `render_action_list.py` Markdown action list (Fix-now / Review /
+  By-design-errors / Ruff PERF)
+- **Measured heat lane** — `profile_heat.py` ranks functions by cProfile
+  cumulative-time share; Review sorts heat-first, reachability second;
+  heat-visible dark rows surface as the harness-priority queue
+- **Mechanical tier0 fixes** — 9 deterministic tiers (regex/re-call/
+  accumulator/invariant hoists, PERF401/402/403, str-join/sum/set) applied
+  by `apply_and_verify.py`, kept only if a `perf_counter` min-of-5
+  re-measure clears the 10% margin, else pre-apply bytes restored
+- **Quality-gated optimization loop** — refactor → test → re-profile with
+  `regression_gate.py` for CI
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full build spec and the
+as-built record (Section 12).
 - **One-command installer** (`install-agent-skills`) deploys skills into any
   repository's `.agents/skills/` directory
 - **Open Standard compliant** — every skill ships a `SKILL.md` frontmatter
@@ -80,18 +94,62 @@ description: Profiles Python code using Big-O scaling and line hit counts with
 ### Profiling Scripts
 
 ```bash
+SK=.agents/skills/code-optimizer/scripts
+
 # Big-O empirical estimation
-python3 .agents/skills/code-optimizer/scripts/run_big_o.py \
+python3 $SK/profilers/run_big_o.py \
   --file src/my_module.py --func process_records
 
 # Line-by-line operation-hit profiling
-python3 .agents/skills/code-optimizer/scripts/run_line_profile.py \
+python3 $SK/profilers/run_line_profile.py \
   --file src/my_module.py --func process_records
 
 # With custom arguments (line profiler only)
-python3 .agents/skills/code-optimizer/scripts/run_line_profile.py \
+python3 $SK/profilers/run_line_profile.py \
   --file src/my_module.py --func process_records \
   --call-args '[1000, {"mode": "strict"}]'
+```
+
+### Full Pipeline (scan → classify → action list)
+
+```bash
+SK=.agents/skills/code-optimizer/scripts
+
+# 1. Baseline CSV: Big-O + line hotspots for every function in scope
+python3 $SK/generate_baseline_csv.py --target-type file \
+  --file src/my_module.py --output baseline.csv
+
+# 2. Deterministic tier routing (tier0 mechanical / tier1 review / tier2)
+python3 $SK/classify_findings.py --input baseline.csv \
+  --output classified.csv
+
+# 3a. Optional: measured heat lane (cProfile share ranking for Review)
+python3 -m cProfile -o heat.prof src/my_workload.py
+python3 $SK/profile_heat.py --profile heat.prof --json > heat.json
+
+# 3b. Optional: repo-wide lanes (ruff PERF, call-graph reachability)
+python3 $SK/ruff_perf.py --files $(find src -name '*.py') \
+  --json > ruff.json
+python3 $SK/detectors/reachability.py --repo . --json > reach.json
+
+# 4. Render the Markdown action list
+python3 $SK/render_action_list.py --input classified.csv \
+  --heat heat.json --ruff ruff.json --reachability reach.json
+```
+
+### Apply a Tier0 Fix (keep-or-revert)
+
+```bash
+SK=.agents/skills/code-optimizer/scripts
+
+# Preview only — never writes
+python3 $SK/apply_and_verify.py --file src/my_module.py \
+  --func process_records --tier auto --dry-run --diff
+
+# Apply; kept only if the perf_counter min-of-5 re-measure clears the
+# 10% margin, otherwise pre-apply bytes are restored
+python3 $SK/apply_and_verify.py --file src/my_module.py \
+  --func process_records --tier auto
 ```
 
 ---

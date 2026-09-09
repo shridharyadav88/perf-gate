@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.resources
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -23,8 +22,10 @@ class TestInstallSkills:
         dest = tmp_path / "out" / "code-optimizer"
         assert dest.is_dir()
         assert (dest / "SKILL.md").is_file()
-        assert (dest / "scripts" / "run_big_o.py").is_file()
-        assert (dest / "scripts" / "run_line_profile.py").is_file()
+        assert (dest / "scripts" / "profilers" / "run_big_o.py").is_file()
+        assert (dest / "scripts" / "profilers" / "run_line_profile.py").is_file()
+        assert (dest / "scripts" / "detectors" / "regex_hoist_analysis.py").is_file()
+        assert (dest / "scripts" / "resolvers" / "apply_regex_hoist.py").is_file()
         assert (dest / "templates" / "report_template.md").is_file()
 
     def test_install_creates_default_target(self, tmp_path: Path, monkeypatch):

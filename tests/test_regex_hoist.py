@@ -30,10 +30,10 @@ def _load_module(name: str, rel_path: str):
 
 
 analysis = _load_module(
-    "_test_regex_hoist_analysis", "code-optimizer/scripts/regex_hoist_analysis.py",
+    "_test_regex_hoist_analysis", "code-optimizer/scripts/detectors/regex_hoist_analysis.py",
 )
 apply_mod = _load_module(
-    "_test_apply_regex_hoist", "code-optimizer/scripts/apply_regex_hoist.py",
+    "_test_apply_regex_hoist", "code-optimizer/scripts/resolvers/apply_regex_hoist.py",
 )
 
 analyze_source = analysis.analyze_source

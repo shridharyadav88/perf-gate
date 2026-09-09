@@ -43,7 +43,7 @@ mode's `getattr(module, func_name)` contract.
 
 For `file`/`files`/`commit`/`repo`, each script resolves every candidate
 function, profiles all of them (capped by `--max-targets`, default 30), and
-prints one block per function **sorted most-severe-first**:
+prints one block per function **sorted most-severe-first**. For full sweeps where coverage matters more than speed, pass `--max-targets 0` to disable the count cap -- the per-target `--timeout` budget remains the guard, and the static stages (AST audit, tier0 dispatch) are uncapped by construction:
 
 * `run_big_o.py` sorts by empirical complexity rank (worse growth first).
 * `run_line_profile.py` sorts by total measured time (not just hotspot
@@ -52,28 +52,87 @@ prints one block per function **sorted most-severe-first**:
 A target that fails to load or profile is still reported (with the error),
 not silently dropped, so broad scans surface everything they touched.
 
+### Execution policy (profiling runs target code)
+
+Profiling **imports and calls** the target functions -- repeatedly for Big-O
+(at growing input sizes up to `--max-n`), once with synthesized arguments
+for line profiling. Three consequences:
+
+* A hanging or pathologically slow target does not hang the run: every
+  target runs under a `--timeout` budget (default 120s per target on all
+  three scripts) and a breach is reported as an error row instead.
+* Side-effecting targets (network, disk, DB, ...) will fire for real. Point
+  `--target-type function` at a small harness module that builds valid input
+  and calls straight through, rather than profiling the side effect
+  directly -- same advice as for multi-argument functions below. To draft one,
+  mine real call sites first (`scripts/mine_callsites.py --file <t> --func <f>
+  --repo <root>`); review the sketch for realism before profiling it, and keep
+  its `__big_o_provenance__` marker so the row reports harness provenance.
+* The timeout abandons the worker thread but cannot kill it; for genuinely
+  untrusted code, isolate at the process level instead of relying on the
+  in-process budget.
+  untrusted code, isolate at the process level instead of relying on the
+  in-process budget.
+* For the best Big-O hit rate, profile inside the target's own environment:
+  a venv with the target `pip install -e`'d (plus a modern Python) lets the
+  loader use the real `__init__` chain (re-exports, import order) instead of
+  stubs; without it, stub-blocked names fail with an actionable error row.
+  Click commands and zero-argument entry points are reported by design --
+  line profiling still applies.
+* Scope first, execute later: every scanning CLI accepts `--dry-run`, which
+  lists the resolved targets and exits before importing or calling anything.
+  Use it before the first real run on unfamiliar code.
+
 ---
 
 ## Phase 1: Parallel Baseline Profiling
-Run baseline checks in parallel before altering any source code, using
+Run tier detection FIRST -- every gate below branches on it:
+
+```bash
+python3 -c "import sys; sys.path.insert(0, '.agents/skills/code-optimizer/scripts'); import tier_gate; print(tier_gate.detect_python_tier())"
+```
+
+On a free-threaded build this prints a `RuntimeWarning` and returns `enhanced` (extra checks active, treat as experimental); otherwise `baseline`. Then run baseline checks in parallel before altering any source code, using
 whichever `--target-type` fits the scope chosen in Phase 0:
 
 1. **Big-O Growth Analysis**:
    ```bash
-   python3 .agents/skills/code-optimizer/scripts/run_big_o.py --file <target_file> --func <func_name>
+   python3 .agents/skills/code-optimizer/scripts/profilers/run_big_o.py --file <target_file> --func <func_name>
    # or, e.g.: --target-type repo --repo . | --target-type commit --commit <sha> | --target-type files --files a.py --files b.py
    ```
 
 2. **Line-by-Line Operation Profiling**:
    ```bash
-   python3 .agents/skills/code-optimizer/scripts/run_line_profile.py --file <target_file> --func <func_name>
+   python3 .agents/skills/code-optimizer/scripts/profilers/run_line_profile.py --file <target_file> --func <func_name>
    # same --target-type options as above
    ```
+   Only the target function itself is instrumented -- time spent inside functions it CALLS appears as a single line. To see hotspots inside a callee, profile that callee directly with explicit `--call-args`.
 
-3. **Correctness Baseline**:
+3. **Static AST & Bytecode Audit** (no execution, all tiers):
+   ```bash
+   python3 .agents/skills/code-optimizer/scripts/detectors/static_audit.py --files <f1.py> [<f2.py> ...]
+   python3 .agents/skills/code-optimizer/scripts/detectors/bytecode_audit.py --files <f1.py> [<f2.py> ...]
+   # advisory by default (exit 0 even with hints); --strict exits 1 on hints; --json emits fingerprints for diffing
+   ```
+
+4. **Concurrency Gate** (tier-aware):
+   ```bash
+   python3 .agents/skills/code-optimizer/scripts/profilers/concurrency.py [--json]
+   # enhanced tier: fails (exit 1) on GIL resurrection; baseline: informational pass
+   ```
+
+5. **Memory Ceiling** (tier-aware thresholds):
+   ```bash
+   python3 .agents/skills/code-optimizer/scripts/profilers/memory.py --baseline <bytes> --current <bytes>
+   # single universal ceiling: 2% on every tier (0.5% false-positives on free-threaded builds); tighten with --max-growth once measured
+   ```
+
+6. **Correctness Baseline**:
    ```bash
    pytest
    ```
+
+`py-spy` and `memray` are OPTIONAL integrations (sampling / native-allocation views) -- documented here for completeness, never required: the built-in path is `line_profiler` + `tracemalloc`, both already dependencies.
 
 ---
 
@@ -89,6 +148,23 @@ Analyze combined diagnostics:
 
 ## Phase 3: Corrective Optimization Loop (Max 3 Attempts)
 
+### Integration decorator (`@audit_performance`)
+
+For local test runs, the importable helper `project_code_optimization.auditing` enforces time/memory budgets in-process (it calls the tier-aware concurrency probe, so it degrades correctly on baseline builds):
+
+```python
+from project_code_optimization import auditing
+
+@auditing.audit_performance(max_seconds=2.0, max_bytes=1_000_000)
+def my_function(...): ...
+
+with auditing.track_memory() as mem:
+    my_function(...)
+print(mem["growth"])  # traced-heap delta in bytes
+```
+
+Signature & failure semantics (normative): bare `@audit_performance` measures and warns; `max_seconds` / `max_bytes` set the budgets (`None` = unenforced; memory unset means tracemalloc is never touched); `enabled=False` restores the exact undecorated function (one flag check, near-zero overhead); `strict=True` raises `auditing.PerformanceViolation` on breach instead of warning; `on_violation=callable` overrides warning delivery. The wrapped function's return value and OWN exceptions are never altered -- audit-machinery failures (including a raising callback or warnings-as-errors) are contained and the result stands. `track_memory(enabled=False)` yields an all-`None` record without touching tracemalloc.
+
 Execute this loop up to 3 times:
 
 1. **Refactor Code**: Modify target file to reduce hotspot execution counts or drop time/space complexity orders.
@@ -98,10 +174,10 @@ Run `pytest`. If tests fail:
 * Do NOT run performance tools yet.
 * Fix regressions and rerun `pytest` until passing.
 
-3. **Performance Verification**:
+3. **Performance Verification** (margin-gated, not any-delta):
 Rerun `run_big_o.py` and `run_line_profile.py`.
-* If Big-O complexity improves or line hits decrease significantly AND unit tests pass: **EXIT LOOP**.
-* If performance does not improve: Revert changes and try an alternative approach.
+* Compare hotspot cost before/after with `confirmation.decide_keep(before_us, after_us)`: keep the change only on a **>10% improvement over repeated runs** (a 2% "improvement" is measurement noise, not a win) AND unit tests pass: **EXIT LOOP**.
+* If the margin is not met: Revert changes and try an alternative approach.
 
 ---
 
@@ -169,7 +245,12 @@ Two things worth knowing before trusting the `severity` column at face value:
   `--target-type function --file <harness>` at a small wrapper module that
   builds valid input scaled by size and calls straight through to the real
   function to get a real reading (see Phase 0's target-type guidance and
-  `run_big_o.py`'s "multi-argument functions need a wrapper" limitation).
+  argument auto-binding: Big-O scales the size parameter and fixes the rest
+  from defaults/annotations, line profiling synthesizes every parameter and
+  cascades shapes on failure. Reach for a harness only when valid input is
+  domain-specific (DB handles, live connections, structured configs)).
+  If importing the target's package drags in heavy dependencies (browsers, ML stacks), load the module FILE directly in the harness instead of importing the package, so the package `__init__` never executes:
+  `spec = importlib.util.spec_from_file_location("target_mod", "<path/to/module.py>"); mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)` -- then call `mod.real_function(...)`. For Big-O the wrapper takes the generated data LIST and scales by `len(data)`.
 
 ---
 
@@ -195,6 +276,14 @@ execution, no LLM:
 | `tier`               | Meaning                                                                 |
 | --------------------- | ------------------------------------------------------------------------ |
 | `tier0_regex_hoist`   | A function-local `re.compile(...)` is provably safe to hoist to module scope (see 5.2). Detected by AST alone, so it fires even on rows where profiling itself failed (`big_o_error`/`line_profile_error` set) — the fix needs no execution evidence. |
+| `tier0_perf402`       | A manual list-copy loop is provably safe to collapse into `out = list(items)` (see 5.2). Same static-only guarantee as `tier0_regex_hoist`. |
+| `tier0_perf401`       | A manual list-build loop is provably safe to collapse into a list comprehension (see 5.2). Same static-only guarantee as `tier0_regex_hoist`. |
+| `tier0_re_call`       | A module-level `re.<method>(...)` call with a constant pattern is provably safe to rewrite to a hoisted compiled call (see 5.2). Same static-only guarantee as `tier0_regex_hoist`. |
+| `tier0_str_join`      | A `s = ''` + `for ...: s += ...` loop is provably safe to collapse into `''.join(...)` (see 5.2). Same static-only guarantee as `tier0_regex_hoist`. |
+| `tier0_sum_reduce`    | A `total = 0` + `for ...: total += ...` loop is provably safe to collapse into `sum(...)` (see 5.2). Same static-only guarantee as `tier0_regex_hoist`. |
+| `tier0_invariant_hoist` | A loop-invariant module-global load is provably safe to hoist to a pre-loop local (see 5.2). Names only -- attribute loads stay report-only. |
+| `tier0_perf403`       | A `d = {}` + `for ...: d[k] = v` loop is provably safe to collapse into a dict comprehension or `dict(...)` (see 5.2). Same static-only guarantee as `tier0_regex_hoist`; PERF403 hits ours cover are deduped in our favor. |
+| `tier0_set_build`     | A `seen = set()` + `for ...: seen.add(...)` loop is provably safe to collapse into `set(...)` (see 5.2). Same static-only guarantee as `tier0_regex_hoist`, plus a no-rebinding check on the name `set`. |
 | `tier2_algorithmic`   | `complexity_rank >= 4` (Quadratic or worse). Needs a real algorithm change. |
 | `tier1_review`        | Profiling succeeded, no complexity problem, no known mechanical pattern. |
 | `not_actionable`      | Neither profiling nor static analysis produced anything to act on.       |
@@ -203,21 +292,54 @@ execution, no LLM:
 certain than a model-driven rewrite even for a row that also happens to show
 high complexity, so take the free win first and re-profile afterward; if the
 complexity problem is still there, it'll show up as `tier2` on the next pass.
+When one function hits several tier0 patterns, the row keeps the
+highest-priority tier (`regex_hoist` > `re_call` > `perf402` > `perf401` > `perf403` > `str_join` > `sum_reduce` > `set_build` > `invariant_hoist`) with all details
+joined in `tier_detail` — run every matching applier below, then re-profile.
+
+**Ruff PERF lane (detection only, no new tiers).** Our AST detectors cover
+what Ruff cannot prove safe (notably `re.compile` hoisting -- no Ruff rule
+exists for it). For the six upstream Perflint rules, do not reimplement:
+run `scripts/ruff_perf.py --files <f.py> ...` (or `ruff check --select PERF
+--output-format json` directly). PERF401/402/403 hits at locations our tier0
+rows already cover are deduped in our favor -- we own the applier plus the
+measurement. The ruff-unique rules (PERF101/102/203) render as their own
+section in `render_action_list.py --ruff <file.json>`; apply with
+`ruff check --select PERF --fix` where a fix is offered, otherwise by hand,
+then re-measure with our profilers before keeping.
 
 ### 5.2 Tier 0 — apply directly, then verify (no LLM)
 
-For every `tier0_regex_hoist` row, group by `file` (one file may have the
-same pattern duplicated across several functions — the tool merges those into
-one hoist automatically) and run:
+Group tier0 rows by `file` and run the matching applier per tier (one file may
+hold the same pattern across several functions — each tool fixes all of
+its matches in one pass):
 
 ```bash
-python3 .agents/skills/code-optimizer/scripts/apply_regex_hoist.py --file <path>
+# tier0_regex_hoist rows:
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_regex_hoist.py --file <path>
+# tier0_perf401 / tier0_perf402 rows:
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_perf_comprehension.py --file <path>
+# tier0_str_join / tier0_sum_reduce rows:
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_accumulator.py --file <path>
+# tier0_re_call rows:
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_re_call.py --file <path>
 # add --dry-run first if you want to see the plan before writing
+```
+
+Or run the wrapped mechanic for one function -- it measures, applies,
+re-measures, and keeps the rewrite only if the gain clears the margin
+(reverting byte-identical otherwise):
+
+```bash
+python3 .agents/skills/code-optimizer/scripts/apply_and_verify.py --file <path> --func <name>
+# --tier regex_hoist|re_call|perf401|perf402|str_join|sum_reduce (default: auto), --min-improvement (default: 0.10)
 ```
 
 This only ever touches assignments where the `re.compile(...)` call doesn't
 reference the function's own parameters or locals (so it's the same object on
-every call) and only when the target module-level name doesn't already exist
+every call) and only when the target module-level name doesn't already exist.
+`apply_perf_comprehension.py` only rewrites an `out = []` init directly
+followed by a single-`append` loop whose iterable, expression, and post-loop
+reads can't observe the difference
 — anything ambiguous is left alone and reported, never guessed at.
 
 After applying, verify like any other change in this skill:
@@ -226,8 +348,10 @@ After applying, verify like any other change in this skill:
    first) and fall back to `tier1_review` for that finding instead of
    retrying blindly.
 2. Re-run `generate_baseline_csv.py` (or `run_line_profile.py`) on the same
-   target and confirm the hotspot's cost actually dropped.
+   target and confirm the hotspot's cost dropped by **more than 10% across repeated runs** (`confirmation.decide_keep`) -- any-delta is noise, not evidence.
 3. Keep the change only if both checks pass.
+
+Re-measurement protocol for `tier1_review` rows carrying an "unconfirmed" complexity note (rank 4 on a single reading): re-run the profiler with repeat runs and/or a wider `--max-n`, record agreement in the row's `confirmations` column, and escalate to the algorithmic lane only if independent readings agree (`confirmation.tier2_confirmed`). A lone Quadratic fit is as likely to be a curve-fit flap as a finding.
 
 ### 5.3 Tier 2 — algorithmic fixes (capable model)
 
@@ -249,10 +373,54 @@ can't produce a confident fix, escalate that row to Tier 2 rather than
 forcing a small model to guess at something structural. Verify exactly as in
 5.2.
 
+Self-hosted runner (no cloud tokens): `scripts/tier1_propose.py --input classified.csv`
+sends each `tier1_review` row (function source + hotspot + Big-O label) to a local
+Ollama server (`$OLLAMA_HOST`, default `http://localhost:11434`) and verifies every
+returned diff on a scratch copy -- parse, apply, byte-compile, measure past the
+margin -- reporting VERIFIED or REJECTED per row without ever writing the original
+unless `--apply` is passed. Start the server with `ollama serve` and pull a code
+model first (`ollama pull qwen2.5-coder:14b`, ~9 GB; override with `--model`).
+Model output carries no equivalence proof, so a measured gain on synthetic inputs
+is evidence, not certainty -- review VERIFIED diffs before merging.
+
 ### 5.5 Reporting
 
 Prefer another CSV over prose here too: run `generate_baseline_csv.py` again
 after all tiers have run and hand back both CSVs (or their diff) rather than
 narrating what changed — the numbers already say it. Fall back to
 `report_template.md` only when a human specifically wants a written
-before/after narrative for one finding.
+before/after narrative for one finding. For the outsider-readable summary --
+what to fix now, what to review, what is by design -- render the classified
+CSV (plus its `.inputs.json` sidecar when present) to Markdown instead of
+handing back raw rows:
+
+```bash
+python3 .agents/skills/code-optimizer/scripts/render_action_list.py --input classified.csv --top 10
+# add --inputs baseline.inputs.json for honest Big-O labels (measured vs unmeasured)
+```
+
+Prioritize with reachability, not size: a slow function nobody calls is
+less urgent than a medium one on every request path. `render_action_list.py
+--reachability` (built by `scripts/detectors/reachability.py --repo <root>`)
+orders `tier1_review` rows by caller count from a conservative static call
+graph -- a Review row with zero known callers may be dead code, but the
+graph cannot see dynamic dispatch or framework wiring, so treat that as a
+triage hint to confirm, never as a deletion license.
+
+When a measured profile exists, heat outranks reachability: build it with `scripts/profile_heat.py --profile run.pstats --json > heat.json` (repeat `--profile` to coalesce several dumps; record without `strip_dirs`, resolved from the repo root, so file keys join) and pass `--heat heat.json` to the renderer. Review rows then sort by cumulative share first, each carrying a `- heat:` line; unprofiled rows sort last, and a render without `--heat` behaves exactly as before. Prefer heat over caller counts whenever the profile covers the workload -- measured burn beats static edges; keep reachability for everything the profile never executed.
+
+Start in CI with the static-only workflow
+(`templates/ci_static_example.yml`): ruff PERF as the blocking gate plus
+the two AST audits as advisory log output -- seconds per PR, no target-code
+execution, no virtualenv. Promote the execution profilers (Big-O, line
+profile, memory/concurrency gates in `templates/ci_gates_example.yml`) to a
+scheduled deep-audit workflow once the static lane is green.
+
+For reviewable fixes, `apply_and_verify.py --diff` prints the
+paste-ready unified diff of a kept-or-rejected rewrite -- useful when the
+applier reverts (below margin) but the reviewer still wants to see exactly
+what was measured and rejected.
+
+Gate exit codes & failure policy (normative): every gate script exits 0 on pass/warn/skipped, 1 when a finding fails, 2 on harness error. Desktop hooks (`templates/pre_commit_example.sh` -- copy to `.git/hooks/` manually, the installer never writes hooks) FAIL OPEN: tool errors warn and exit 0. CI (`templates/ci_gates_example.yml`) FAILS CLOSED: harness errors fail the build. `skipped` is never a failure. For rollout on legacy codebases, diff finding `fingerprint` sets (`--json` outputs carry them) and fail only on INTRODUCED fingerprints -- see the CI template. Hold the line across PRs with `scripts/regression_gate.py --baseline base_classified.csv --current head_classified.csv` (complexity-class flips and new tier0/tier2 findings fail the build; wall-time drift only advises unless `--strict-time`) -- see `templates/ci_regression_example.yml`.
+
+When to reach for something else instead of a full skill pass: if the question is only 'does this file violate upstream style/perf lints', run `ruff check --select PERF` and stop -- the skill adds nothing on top. If the question needs production sampling or native-allocation views (multi-process services, C extensions), use `py-spy` / `memray` directly instead of the built-in profilers. Bring the full skill pass when a candidate fix must be measured, verified, and kept-or-reverted behind the gates above.

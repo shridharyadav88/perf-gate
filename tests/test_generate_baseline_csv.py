@@ -49,6 +49,15 @@ def _default_args(**overrides):
     return SimpleNamespace(**base)
 
 
+def _body_without_preamble(text: str) -> str:
+    """Strip the W7 `# key=value` provenance preamble preceding the CSV header."""
+    lines = text.splitlines(keepends=True)
+    i = 0
+    while i < len(lines) and lines[i].lstrip().startswith("#"):
+        i += 1
+    return "".join(lines[i:])
+
+
 @pytest.fixture
 def linear_quadratic_file(tmp_path: Path) -> Path:
     return _write(
@@ -86,6 +95,24 @@ class TestBuildRows:
         assert "File not found" in rows[0]["big_o_error"] or rows[0]["big_o_error"] != ""
 
 
+class TestStreamingMain:
+    def test_rows_stream_in_resolution_order(self, linear_quadratic_file, capsys):
+        out_path = linear_quadratic_file.parent / "out.csv"
+        main([
+            "--target-type", "file", "--file", str(linear_quadratic_file),
+            "--min-n", "10", "--max-n", "40", "--n-measures", "2",
+            "--output", str(out_path),
+        ])
+        body = "\n".join(
+            line for line in out_path.read_text().splitlines() if not line.startswith("#")
+        )
+        rows = list(csv.DictReader(io.StringIO(body)))
+        # Emission order (linear first: file order), NOT severity order --
+        # streaming keeps completed rows on interrupted runs.
+        assert [r["function"] for r in rows] == ["linear", "quad"]
+        assert [r["rank"] for r in rows] == ["1", "2"]
+
+
 class TestSortRows:
     def test_sorts_most_severe_first_and_assigns_rank(self, linear_quadratic_file):
         rows = build_rows(
@@ -113,7 +140,7 @@ class TestMainCLI:
         main(["--target-type", "file", "--file", str(linear_quadratic_file),
               "--min-n", "50", "--max-n", "2000", "--n-measures", "6"])
         out = capsys.readouterr().out
-        reader = csv.DictReader(io.StringIO(out))
+        reader = csv.DictReader(io.StringIO(_body_without_preamble(out)))
         rows = list(reader)
         assert reader.fieldnames == FIELDNAMES
         assert {row["function"] for row in rows} == {"linear", "quad"}
@@ -124,7 +151,7 @@ class TestMainCLI:
               "--min-n", "50", "--max-n", "2000", "--n-measures", "6",
               "--output", str(out_path)])
         content = out_path.read_text()
-        reader = csv.DictReader(io.StringIO(content))
+        reader = csv.DictReader(io.StringIO(_body_without_preamble(content)))
         assert reader.fieldnames == FIELDNAMES
         assert len(list(reader)) == 2
 

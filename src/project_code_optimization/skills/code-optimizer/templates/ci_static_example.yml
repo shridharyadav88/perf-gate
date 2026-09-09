@@ -1,0 +1,56 @@
+# Static-first CI for the code-optimizer skill (GitHub Actions).
+#
+# This is the recommended front door: everything here is pure static
+# analysis -- AST parsing plus `ruff` -- so it runs in seconds with NO
+# target-code execution, NO virtualenv, and NO side effects. Execution
+# profilers (Big-O, line profile, memory/concurrency gates) stay opt-in
+# for scheduled deep-audit workflows, never blocking PRs.
+#
+# POLICY: ruff PERF is the blocking gate (precise, low false-positive).
+# The two AST audits below are advisory log output; strictness for them
+# lives in ci_gates_example.yml as a fingerprint diff (only newly
+# introduced findings fail). All three steps scope to PR-changed files,
+# so legacy codebases can adopt this on day one without boiling the ocean.
+name: performance-static
+
+on:
+  pull_request:
+
+jobs:
+  static-perf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install linters (ruff only -- no target deps needed)
+        run: pip install ruff
+      - name: Ruff PERF on changed files (upstream lints)
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only "$BASE"...HEAD -- '*.py' | tr '\n' ' ')
+          if [ -z "$CHANGED" ]; then echo "no Python changes"; exit 0; fi
+          # --no-cache: keep residue out of the tree. Exit 1 on any hit.
+          ruff check --select PERF --no-cache $CHANGED
+      # Our own two AST audits stay ADVISORY here (no --strict): their hints
+      # are deliberately noisy (e.g. nested-loop notes inside AST visitors,
+      # load-count notes on hot helpers) and go green via the fingerprint
+      # diff in ci_gates_example.yml. Promote either to --strict once the
+      # baseline for your repo is clean.
+      - name: Static AST audit on changed files (advisory)
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only "$BASE"...HEAD -- '*.py' | tr '\n' ' ')
+          if [ -z "$CHANGED" ]; then echo "no Python changes"; exit 0; fi
+          SKILL=.agents/skills/code-optimizer
+          python3 "$SKILL/scripts/detectors/static_audit.py" --files $CHANGED
+      - name: Bytecode load audit on changed files (advisory, no execution)
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only "$BASE"...HEAD -- '*.py' | tr '\n' ' ')
+          if [ -z "$CHANGED" ]; then echo "no Python changes"; exit 0; fi
+          SKILL=.agents/skills/code-optimizer
+          python3 "$SKILL/scripts/detectors/bytecode_audit.py" --files $CHANGED

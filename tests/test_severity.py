@@ -17,7 +17,7 @@ def _load_module(name: str, rel_path: str):
     return module
 
 
-sev = _load_module("_test_severity", "code-optimizer/scripts/severity.py")
+sev = _load_module("_test_severity", "code-optimizer/scripts/profilers/severity.py")
 
 
 class TestComplexityRank:
