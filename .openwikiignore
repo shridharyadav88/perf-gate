@@ -1,4 +1,0 @@
-# Keep OpenWiki tooling out of the product wiki graph and future doc runs.
-.github/workflows/openwiki-update.yml
-scripts/build-wiki-site.mjs
-docs/
