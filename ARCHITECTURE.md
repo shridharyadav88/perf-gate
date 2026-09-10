@@ -598,13 +598,34 @@ Post-spec additions (same stdlib-only, deterministic contract):
   already covered by tier0 rows are deduped in our favor).
 * Two-level regression gate: `regression_gate.py`
   (`templates/ci_regression_example.yml`).
+* Diff-scoped PR gate (recommended pre-merge lane): `pr_gate.py`
+  resolves only functions the diff touches (`git diff -U0` ranges
+  intersected with AST spans; untracked files fully in scope),
+  profiles base in an isolated `git worktree` and the PR tree each in
+  its own `generate_baseline_csv`/`classify_findings` subprocess
+  (per-pair `--target-type function`, never whole files, so base and
+  PR modules never share `sys.modules`), and fails only on measured,
+  introduced regressions: rank worsening, newly-entered tier0
+  (new functions fail on tier0, advise on tier2). Drift beyond the
+  20% default margin advises; unmeasurable targets and infra hiccups
+  SKIP exit 0; bad invocation exits 2. CI template:
+  `templates/pr_gate_example.yml`; this repo dogfoods it
+  (`.github/workflows/perf-gate.yml`).
+* LLM-assisted input synthesis (optional, opt-in fallback):
+  `llm_harness.py` asks a small model (Ollama default, OpenRouter
+  opt-in) for an N-growing builder plus fixed calls when a function
+  has no inferable shape; the proposal passes AST-parse, safe-builtins
+  + stdlib import-allowlists, 5s exec-timeout, memoized-size, monotonic
+  growth, and one fixed-call smoke gate before a budget-capped bounded
+  fit. Deterministic lanes stay the default; only an explicit
+  `--llm-harness` flag invokes the model for unresolved targets.
 * Verdict timing: keep/revert numbers come from
   `measure_verdict_us()` — `time.perf_counter()` min-of-5
   (`_VERDICT_REPEATS = 5`) over the winning synthetic call shape.
   The line-profiler hotspot sum is triage signal, not the verdict
   (profiler overhead variance flips micro-scale comparisons).
 
-Validation: full suite green (`546 passed`, 2026-09-09) plus `ruff
+Validation: full suite green (`827 passed`, 2026-09-10) plus `ruff
 check` clean on skill and tests. Live recall on the crawl4ai
 `processors/pdf/utils.py` scope the same day: 3 tier0 rows
 (regex hoists + the new invariant hoist), heat-visible dark row at

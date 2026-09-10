@@ -1,0 +1,33 @@
+# Recommended pre-merge performance gate for the perf-gate skill
+# (GitHub Actions). Supersedes ci_regression_example.yml's stash dance:
+# pr_gate.py scopes to functions the diff touches, profiles base in an
+# isolated worktree (never touches your checkout), and compares.
+#
+# POLICY (fail only on measured, introduced regressions):
+#   * a touched function's complexity rank got worse, or a touched
+#     function is newly in a mechanical tier0 tier  -> build fails (exit 1)
+#   * wall-clock hotspot drift beyond --margin is ADVISORY (timers are noisy
+#     and CI runners vary); promote with --strict-time only on a pinned runner
+#   * unmeasurable targets and infra hiccups SKIP with exit 0 (a gate that
+#     cries wolf gets deleted); bad arguments / not-a-repo fail exit 2
+name: perf-gate
+
+on:
+  pull_request:
+
+jobs:
+  perf-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install perf-gate (profiling deps only; gate itself is stdlib)
+        run: pip install .
+      - name: Gate touched functions vs base
+        run: |
+          python3 .agents/skills/perf-gate/scripts/pr_gate.py \
+            --base "${{ github.event.pull_request.base.sha }}"
