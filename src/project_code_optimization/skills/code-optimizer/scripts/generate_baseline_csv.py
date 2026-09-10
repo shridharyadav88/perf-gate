@@ -104,6 +104,19 @@ def _profile_big_o_field(
             timeout=getattr(args, "timeout", None), probe_log=probe_log,
         )
     except Exception as exc:
+        if "synthetic call failed" in str(exc) and _llm_spend(args):
+            try:
+                return _llm_fallback_row(
+                    file_path, func_name, target_func, str(exc), args,
+                    input_records)
+            except LlmFallbackExhausted as triaged:
+                _record(None)  # triage verdict annotated onto the error row
+                return {
+                    "empirical_big_o": "", "complexity_rank": severity.UNKNOWN_RANK,
+                    "big_o_error": str(triaged),
+                }
+            except Exception:
+                pass  # fall through to the deterministic error row below
         _record(None)
         return {
             "empirical_big_o": "", "complexity_rank": severity.UNKNOWN_RANK,
@@ -113,6 +126,67 @@ def _profile_big_o_field(
     _record(probe_log)
     rank = severity.complexity_rank(best_fit)
     return {"empirical_big_o": best_fit, "complexity_rank": rank, "big_o_error": ""}
+
+
+def _llm_spend(args) -> bool:
+    """Consume one LLM-harness budget unit; False when the lane is off/exhausted."""
+    remaining = getattr(args, "llm_budget", 0) or 0
+    if not getattr(args, "llm_harness", False) or remaining <= 0:
+        return False
+    try:
+        args.llm_budget = remaining - 1
+    except (AttributeError, TypeError):
+        return False
+    return True
+
+
+def _llm_fallback_row(file_path: str, func_name: str, target_func,
+                      synthetic_error: str, args, input_records) -> dict:
+    """Run one target through the LLM-harness lane (raises on any failure).
+
+    Only reached after deterministic synthesis failed: asks the model for a
+    validated ``build_input`` and re-runs the fit with it. A triage verdict
+    (NEEDS-RESOURCE) keeps the original error row but annotates it, so the
+    row stays actionable without spending more budget.
+    """
+    import llm_harness as llm_harness_mod  # noqa: E402
+
+    backend = getattr(args, "llm_backend", "ollama")
+    try:
+        llm_harness_mod.check_backend(backend, timeout=10.0)
+    except llm_harness_mod.LlmBackendUnreachable:
+        args.llm_harness = False  # one failed preflight disables the lane
+        raise
+    try:
+        outcome = llm_harness_mod.propose_and_validate(
+            file_path, func_name, synthetic_error, backend=backend,
+            model=getattr(args, "llm_model", None) or None,
+            timeout=getattr(args, "llm_timeout", None) or None,
+            cache={}, cache_path=getattr(args, "llm_cache", None) or None,
+        )
+    except llm_harness_mod.LlmNeedsResource as exc:
+        if input_records is not None:
+            input_records.append(_input_record(file_path, func_name, {
+                "provenance": "llm-assisted",
+                "shape_desc": f"needs-resource: {str(exc)[:120]}"}))
+        raise LlmFallbackExhausted(
+            f"{synthetic_error} [llm-harness triage: {exc}]")
+    adapter = llm_harness_mod.bind_adapter(outcome["build_fn"], target_func)
+    probe_log: dict = {}
+    best_fit, _fitted = run_big_o.profile_big_o(
+        target_func, min_n=args.min_n, max_n=args.max_n, n_measures=args.n_measures,
+        n_timings=args.n_timings, n_repeats=args.n_repeats,
+        timeout=getattr(args, "timeout", None), probe_log=probe_log,
+        adapter=adapter,
+    )
+    if input_records is not None:
+        input_records.append(_input_record(file_path, func_name, probe_log))
+    rank = severity.complexity_rank(best_fit)
+    return {"empirical_big_o": best_fit, "complexity_rank": rank, "big_o_error": ""}
+
+
+class LlmFallbackExhausted(Exception):
+    """Internal: LLM lane done, keep the (annotated) deterministic error row."""
 
 
 def _profile_line_field(file_path: str, func_name: str, timeout: float | None = None) -> dict:
@@ -253,6 +327,34 @@ def main(argv: list[str] | None = None) -> None:
         "--dry-run", action="store_true",
         help="List resolved targets and exit before importing or calling anything "
         "(no CSV or sidecar is written).",
+    )
+    parser.add_argument(
+        "--llm-harness", action="store_true",
+        help="Opt-in: when deterministic input synthesis fails for a target, "
+        "ask a small model for a validated build_input snippet "
+        "(scripts/llm_harness.py) before recording the error row. Off by "
+        "default; the deterministic path is untouched.",
+    )
+    parser.add_argument(
+        "--llm-backend", choices=["ollama", "openrouter"], default="ollama",
+        help="Model backend for --llm-harness (default: ollama; openrouter "
+        "needs OPENROUTER_API_KEY).",
+    )
+    parser.add_argument(
+        "--llm-model", default=None,
+        help="Model id (defaults to a small instruct model per backend).",
+    )
+    parser.add_argument(
+        "--llm-budget", type=int, default=5,
+        help="Max targets per run that may spend an LLM call (default: 5).",
+    )
+    parser.add_argument(
+        "--llm-timeout", type=float, default=60.0,
+        help="Seconds per model call and proposal validation (default: 60).",
+    )
+    parser.add_argument(
+        "--llm-cache", default=None,
+        help="JSON response-cache path shared by LLM proposals (default: none).",
     )
     args = parser.parse_args(argv)
 

@@ -166,3 +166,105 @@ class TestMainCLI:
             main(["--target-type", "file", "--file", "/nonexistent/mod.py"])
         assert excinfo.value.code == 1
         assert "Error:" in capsys.readouterr().err
+
+
+class _FakeResp:
+    """Minimal urlopen response for the mocked model backend."""
+
+    def __init__(self, payload):
+        import json as _json
+
+        self._buf = io.BytesIO(_json.dumps(payload).encode("utf-8"))
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self, n=-1):
+        return self._buf.read(n)
+
+
+_LLM_GOOD_CODE = textwrap.dedent("""\
+    def build_input(n):
+        rows = [{"name": "x"} for _ in range(n)]
+        return ([rows], {})
+    """)
+
+
+def _fake_llm(monkeypatch, reply):
+    """Serve one canned reply for both preflight and generate calls."""
+    import urllib.request
+
+    calls = []
+
+    def fake_urlopen(request, timeout=None):
+        url = request if isinstance(request, str) else request.full_url
+        calls.append(url)
+        if url.endswith("/api/tags") or url.endswith("/api/v1/models"):
+            return _FakeResp({"ok": True})
+        return _FakeResp({"response": reply})
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    return calls
+
+
+def _llm_target(tmp_path: Path) -> str:
+    mod = tmp_path / "llm_mod.py"
+    mod.write_text(textwrap.dedent("""\
+        def first_lens(rows):
+            return sum(len(r["name"]) for r in rows)
+        """))
+    return str(mod)
+
+
+class TestLlmHarnessFallback:
+    def test_flag_off_never_touches_network(self, monkeypatch, tmp_path):
+        import urllib.request
+
+        def boom(request, timeout=None):
+            raise AssertionError("no HTTP without --llm-harness")
+
+        monkeypatch.setattr(urllib.request, "urlopen", boom)
+        args = _default_args()
+        fields = _gen._profile_big_o_field(
+            _llm_target(tmp_path), "first_lens", {}, args, [])
+        assert fields["empirical_big_o"] == ""
+        assert "synthetic call failed" in fields["big_o_error"]
+
+    def test_flag_on_recovers_row_and_sidecar(self, monkeypatch, tmp_path):
+        reply = f"Here:\n```python\n{_LLM_GOOD_CODE}\n```\n"
+        _fake_llm(monkeypatch, reply)
+        args = _default_args(min_n=50, max_n=500, n_measures=3,
+                             llm_harness=True, llm_budget=5, llm_timeout=10)
+        records: list = []
+        fields = _gen._profile_big_o_field(
+            _llm_target(tmp_path), "first_lens", {}, args, records)
+        assert fields["big_o_error"] == ""
+        # At micro-N the fit itself may read Constant (timer resolution);
+        # what this lane proves is recovery + honest provenance, not the class.
+        assert fields["empirical_big_o"].startswith(("Linear", "Constant"))
+        assert records and records[0]["provenance"] == "llm-assisted"
+
+    def test_budget_spent_exactly_once(self, monkeypatch, tmp_path):
+        calls = _fake_llm(monkeypatch, f"```python\n{_LLM_GOOD_CODE}\n```")
+        args = _default_args(min_n=50, max_n=500, n_measures=3,
+                             llm_harness=True, llm_budget=1, llm_timeout=10)
+        path = _llm_target(tmp_path)
+        _gen._profile_big_o_field(path, "first_lens", {}, args, [])
+        before = len(calls)
+        assert args.llm_budget == 0
+        fields = _gen._profile_big_o_field(path, "first_lens", {}, args, [])
+        assert "synthetic call failed" in fields["big_o_error"]
+        assert len(calls) == before  # exhausted budget: no second attempt
+
+    def test_triage_verdict_annotates_error_row(self, monkeypatch, tmp_path):
+        _fake_llm(monkeypatch, "NEEDS-RESOURCE: needs a live database")
+        args = _default_args(llm_harness=True, llm_budget=5, llm_timeout=10)
+        records: list = []
+        fields = _gen._profile_big_o_field(
+            _llm_target(tmp_path), "first_lens", {}, args, records)
+        assert fields["empirical_big_o"] == ""
+        assert "[llm-harness triage: needs a live database]" in fields["big_o_error"]
+        assert records and "needs-resource" in records[0]["shape_desc"]

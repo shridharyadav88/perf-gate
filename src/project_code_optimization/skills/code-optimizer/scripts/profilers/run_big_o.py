@@ -223,6 +223,7 @@ def profile_big_o(
     n_repeats: int = 1,
     timeout: float | None = None,
     probe_log: dict | None = None,
+    adapter=None,
 ) -> tuple[str, dict]:
     """Run empirical Big-O estimation on *func*.
 
@@ -243,6 +244,13 @@ def profile_big_o(
     measurement and sums the time (helps when a single call is close to the
     timer's resolution). Raise both for a report that will make a specific
     complexity claim; the cost is roughly linear in each.
+
+    *adapter*, when given, is used as-is (``adapter(data)`` calls *func*
+    with an input of size ``len(data)``) instead of the deterministic
+    probe search — the ``llm_harness.py`` path for model-proposed,
+    mechanically validated input builders. Provenance is then recorded as
+    ``"llm-assisted"`` (never ``"harness"``: that label stays reserved for
+    human-approved harnesses).
 
     Returns
     -------
@@ -277,21 +285,25 @@ def profile_big_o(
 
     # Bind multi-parameter functions to big_o's single-list convention, then
     # fast-fail probe each candidate shape on tiny input: a doomed fit must
-    # become a clear error row, not a wasted budget burn.
-    candidates = _build_adapter(func)
+    # become a clear error row, not a wasted budget burn. A caller-supplied
+    # adapter (llm_harness.py, already validated) skips the probe search.
     probe_errors: list[str] = []
-    adapter = None
     winning_shape = ""
-    for candidate, shape_desc in candidates:
-        try:
-            timeouts.run_with_timeout(lambda: candidate([0, 1, 2, 3, 4]), timeout)
-            adapter = candidate
-            winning_shape = shape_desc
-            break
-        except timeouts.TimeoutBudgetExceeded:
-            raise  # a hung probe is a hung target: keep TimeoutError semantics
-        except Exception as exc:
-            probe_errors.append(f"{shape_desc}: {exc}")
+    adapter_supplied = adapter is not None
+    if adapter is None:
+        candidates = _build_adapter(func)
+        for candidate, shape_desc in candidates:
+            try:
+                timeouts.run_with_timeout(lambda: candidate([0, 1, 2, 3, 4]), timeout)
+                adapter = candidate
+                winning_shape = shape_desc
+                break
+            except timeouts.TimeoutBudgetExceeded:
+                raise  # a hung probe is a hung target: keep TimeoutError semantics
+            except Exception as exc:
+                probe_errors.append(f"{shape_desc}: {exc}")
+    else:
+        winning_shape = "llm-assisted build_input"
     if adapter is None:
         name = getattr(func, "__name__", func)
         raise ValueError(
@@ -328,8 +340,14 @@ def profile_big_o(
             residuals[str(key)] = number if number is not None and math.isfinite(number) \
                 else None
         marker = getattr(func, "__big_o_provenance__", "synthetic")
+        if marker == "harness":
+            provenance = "harness"
+        elif adapter_supplied:
+            provenance = "llm-assisted"
+        else:
+            provenance = "synthetic"
         probe_log.update({
-            "provenance": "harness" if marker == "harness" else "synthetic",
+            "provenance": provenance,
             "shape_desc": winning_shape,
             "min_n": min_n,
             "max_n": max_n,
