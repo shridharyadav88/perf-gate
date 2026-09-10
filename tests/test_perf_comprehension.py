@@ -2,7 +2,7 @@
 apply_perf_comprehension.py (the codemod).
 
 Loaded via importlib.resources like the other bundled scripts — their parent
-directory, ``code-optimizer``, contains a hyphen so it can't be an importable
+directory, ``perf-gate``, contains a hyphen so it can't be an importable
 package.
 """
 
@@ -16,7 +16,7 @@ import textwrap
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -27,11 +27,11 @@ def _load_module(name: str, rel_path: str):
 
 analysis = _load_module(
     "_test_perf_comprehension_analysis",
-    "code-optimizer/scripts/detectors/perf_comprehension_analysis.py",
+    "perf-gate/scripts/detectors/perf_comprehension_analysis.py",
 )
 apply_mod = _load_module(
     "_test_apply_perf_comprehension",
-    "code-optimizer/scripts/resolvers/apply_perf_comprehension.py",
+    "perf-gate/scripts/resolvers/apply_perf_comprehension.py",
 )
 
 analyze_source = analysis.analyze_source
@@ -436,7 +436,7 @@ class TestApplyCorrectness:
 class TestClassifyTiers:
     def test_perf_rows_route_to_tier0(self, tmp_path):
         cf = _load_module(
-            "_test_classify_for_perf", "code-optimizer/scripts/classify_findings.py",
+            "_test_classify_for_perf", "perf-gate/scripts/classify_findings.py",
         )
         mod = tmp_path / "mod.py"
         mod.write_text(
@@ -488,7 +488,7 @@ class TestClassifyTiers:
 
     def test_nested_loop_routes_to_tier0(self, tmp_path):
         cf = _load_module(
-            "_test_classify_for_nested", "code-optimizer/scripts/classify_findings.py",
+            "_test_classify_for_nested", "perf-gate/scripts/classify_findings.py",
         )
         mod = tmp_path / "mod.py"
         mod.write_text(

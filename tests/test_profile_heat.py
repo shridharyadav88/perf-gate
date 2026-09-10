@@ -12,7 +12,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -21,7 +21,7 @@ def _load_module(name: str, rel_path: str):
     return module
 
 
-heat_mod = _load_module("_test_heat", "code-optimizer/scripts/profile_heat.py")
+heat_mod = _load_module("_test_heat", "perf-gate/scripts/profile_heat.py")
 
 TARGET = (
     "def hot(n):\n"

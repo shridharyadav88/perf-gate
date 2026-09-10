@@ -3,7 +3,7 @@
 Loaded the same way ``tests/test_profiling_scripts.py`` loads the profiler
 scripts: via :mod:`importlib.resources` since the module lives under the
 ``skills/`` package-data tree rather than an importable package (its parent
-directory, ``code-optimizer``, contains a hyphen).
+directory, ``perf-gate``, contains a hyphen).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -27,7 +27,7 @@ def _load_module(name: str, rel_path: str):
 
 
 _tr = _load_module(
-    "_test_target_resolution", "code-optimizer/scripts/profilers/target_resolution.py"
+    "_test_target_resolution", "perf-gate/scripts/profilers/target_resolution.py"
 )
 
 resolve_targets = _tr.resolve_targets

@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "project-code-optimization"
+name = "perf-gate"
 version = "0.1.0"
-description = "Agent Skills for automated Python Big-O profiling, line profiling, and corrective test loops."
+description = "Deterministic pre-merge Python performance gate: profile touched functions, fail PRs on measured regressions, propose mechanical fixes."
 readme = "README.md"
 license = "MIT"
 authors = [
@@ -41,18 +41,18 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/enterprise/project-code-optimization"
-Repository = "https://github.com/enterprise/project-code-optimization"
+Homepage = "https://github.com/shridharyadav88/perf-gate"
+Repository = "https://github.com/shridharyadav88/perf-gate"
 
 [project.scripts]
-install-agent-skills = "project_code_optimization.cli:main"
+install-agent-skills = "perf_gate.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["project_code_optimization*"]
+include = ["perf_gate*"]
 
 [tool.setuptools.package-data]
-"project_code_optimization" = ["skills/**/*"]
+"perf_gate" = ["skills/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

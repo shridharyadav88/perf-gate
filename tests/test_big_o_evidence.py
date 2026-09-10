@@ -9,7 +9,7 @@ import sys
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -18,15 +18,15 @@ def _load_module(name: str, rel_path: str):
     return module
 
 
-mine_mod = _load_module("_test_mine", "code-optimizer/scripts/mine_callsites.py")
+mine_mod = _load_module("_test_mine", "perf-gate/scripts/mine_callsites.py")
 render_mod = _load_module(
-    "_test_ev_render", "code-optimizer/scripts/render_action_list.py"
+    "_test_ev_render", "perf-gate/scripts/render_action_list.py"
 )
 gen_mod = _load_module(
-    "_test_ev_gen", "code-optimizer/scripts/generate_baseline_csv.py"
+    "_test_ev_gen", "perf-gate/scripts/generate_baseline_csv.py"
 )
 big_o_mod = _load_module(
-    "_test_ev_big_o", "code-optimizer/scripts/profilers/run_big_o.py"
+    "_test_ev_big_o", "perf-gate/scripts/profilers/run_big_o.py"
 )
 
 

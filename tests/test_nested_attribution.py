@@ -16,7 +16,7 @@ import sys
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -28,7 +28,7 @@ def _load_module(name: str, rel_path: str):
 def _detector(name: str):
     mod = _load_module(
         f"_test_nested_{name}",
-        f"code-optimizer/scripts/detectors/{name}_analysis.py",
+        f"perf-gate/scripts/detectors/{name}_analysis.py",
     )
     return mod.analyze_source
 

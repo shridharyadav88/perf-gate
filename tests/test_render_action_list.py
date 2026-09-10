@@ -13,7 +13,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -23,13 +23,13 @@ def _load_module(name: str, rel_path: str):
 
 
 render_mod = _load_module(
-    "_test_render", "code-optimizer/scripts/render_action_list.py"
+    "_test_render", "perf-gate/scripts/render_action_list.py"
 )
 gen_mod = _load_module(
-    "_test_render_gen", "code-optimizer/scripts/generate_baseline_csv.py"
+    "_test_render_gen", "perf-gate/scripts/generate_baseline_csv.py"
 )
 big_o_mod = _load_module(
-    "_test_render_big_o", "code-optimizer/scripts/profilers/run_big_o.py"
+    "_test_render_big_o", "perf-gate/scripts/profilers/run_big_o.py"
 )
 
 BASE_COLUMNS = list(gen_mod.FIELDNAMES) + ["tier", "tier_detail"]
@@ -452,7 +452,7 @@ class TestTierRegistry:
     def _classify(self):
         return _load_module(
             "_test_classify_for_registry",
-            "code-optimizer/scripts/classify_findings.py",
+            "perf-gate/scripts/classify_findings.py",
         )
 
     def test_priority_tuples_match(self):

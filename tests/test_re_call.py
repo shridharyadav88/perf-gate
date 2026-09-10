@@ -12,7 +12,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -23,11 +23,11 @@ def _load_module(name: str, rel_path: str):
 
 analysis = _load_module(
     "_test_recall_analysis",
-    "code-optimizer/scripts/detectors/re_call_analysis.py",
+    "perf-gate/scripts/detectors/re_call_analysis.py",
 )
 apply_mod = _load_module(
     "_test_apply_recall",
-    "code-optimizer/scripts/resolvers/apply_re_call.py",
+    "perf-gate/scripts/resolvers/apply_re_call.py",
 )
 
 analyze_source = analysis.analyze_source
@@ -163,7 +163,7 @@ class TestApplyCorrectness:
 class TestClassifyTiers:
     def test_re_call_rows_route_to_tier0(self, tmp_path):
         cf = _load_module(
-            "_test_classify_for_recall", "code-optimizer/scripts/classify_findings.py",
+            "_test_classify_for_recall", "perf-gate/scripts/classify_findings.py",
         )
         mod = tmp_path / "mod.py"
         mod.write_text(WITH_RE + "def f(s):\n    return re.match(r'a', s)\n")

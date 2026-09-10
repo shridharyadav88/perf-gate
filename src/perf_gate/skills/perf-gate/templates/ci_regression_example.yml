@@ -1,4 +1,4 @@
-# Example regression gate for the code-optimizer skill (GitHub Actions).
+# Example regression gate for the perf-gate skill (GitHub Actions).
 #
 # POLICY (two-level, per the gate contract):
 #   * complexity-class degradation (Linear -> Quadratic) or a newly
@@ -30,7 +30,7 @@ jobs:
           python-version: "3.12"
       - name: Profile tracked scope on base and head
         run: |
-          SKILL=.agents/skills/code-optimizer
+          SKILL=.agents/skills/perf-gate
           # Tracked scope: the files whose performance you gate (start with
           # one hot file; widen once the lane is green).
           SCOPE="src/hot/path.py"
@@ -49,5 +49,5 @@ jobs:
             --input head.csv --output head_classified.csv
       - name: Regression gate (class + findings fail, time advises)
         run: |
-          python3 .agents/skills/code-optimizer/scripts/regression_gate.py \
+          python3 .agents/skills/perf-gate/scripts/regression_gate.py \
             --baseline base_classified.csv --current head_classified.csv

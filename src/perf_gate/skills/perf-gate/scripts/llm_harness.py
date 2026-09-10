@@ -39,7 +39,7 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_MAX_TOKENS = 600
 DEFAULT_CACHE = os.path.join(
-    os.path.expanduser("~"), ".cache", "project-code-optimization",
+    os.path.expanduser("~"), ".cache", "perf-gate",
     "llm_harness.json",
 )
 

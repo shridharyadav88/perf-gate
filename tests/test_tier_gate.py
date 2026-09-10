@@ -1,7 +1,7 @@
 """Tests for tier_gate.py (W1: tier detection, requires_tier, Finding).
 
 Loaded via importlib by file path like the other bundled scripts -- the
-parent directory, ``code-optimizer``, contains a hyphen so it can't be an
+parent directory, ``perf-gate``, contains a hyphen so it can't be an
 importable package.
 """
 
@@ -17,7 +17,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -26,7 +26,7 @@ def _load_module(name: str, rel_path: str):
     return module
 
 
-gate = _load_module("_test_tier_gate", "code-optimizer/scripts/tier_gate.py")
+gate = _load_module("_test_tier_gate", "perf-gate/scripts/tier_gate.py")
 
 
 def _mock_runtime(monkeypatch, version, gil_disabled):

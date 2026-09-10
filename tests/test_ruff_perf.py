@@ -14,7 +14,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -23,9 +23,9 @@ def _load_module(name: str, rel_path: str):
     return module
 
 
-ruff_mod = _load_module("_test_ruff", "code-optimizer/scripts/ruff_perf.py")
+ruff_mod = _load_module("_test_ruff", "perf-gate/scripts/ruff_perf.py")
 render_mod = _load_module(
-    "_test_ruff_render", "code-optimizer/scripts/render_action_list.py"
+    "_test_ruff_render", "perf-gate/scripts/render_action_list.py"
 )
 
 def _ruff_usable():

@@ -1,7 +1,7 @@
 """Tests for detectors/static_audit.py and its classify_findings.py wiring (W3).
 
 Loaded via importlib by file path like the other bundled scripts -- the
-parent directory, ``code-optimizer``, contains a hyphen so it can't be an
+parent directory, ``perf-gate``, contains a hyphen so it can't be an
 importable package.
 """
 
@@ -15,7 +15,7 @@ import textwrap
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -25,13 +25,13 @@ def _load_module(name: str, rel_path: str):
 
 
 audit = _load_module(
-    "_test_static_audit", "code-optimizer/scripts/detectors/static_audit.py"
+    "_test_static_audit", "perf-gate/scripts/detectors/static_audit.py"
 )
 classify_mod = _load_module(
-    "_test_sa_classify", "code-optimizer/scripts/classify_findings.py"
+    "_test_sa_classify", "perf-gate/scripts/classify_findings.py"
 )
 gen_mod = _load_module(
-    "_test_sa_gen", "code-optimizer/scripts/generate_baseline_csv.py"
+    "_test_sa_gen", "perf-gate/scripts/generate_baseline_csv.py"
 )
 
 analyze_source = audit.analyze_source

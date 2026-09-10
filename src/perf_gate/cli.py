@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from project_code_optimization import BUNDLED_SKILLS, __version__
+from perf_gate import BUNDLED_SKILLS, __version__
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -64,7 +64,7 @@ def install_skills(
     import importlib.resources
 
     try:
-        pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+        pkg_skills = importlib.resources.files("perf_gate") / "skills"
     except Exception as exc:
         logger.error("Cannot locate bundled skills: %s", exc)
         if not dry_run:

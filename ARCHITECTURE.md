@@ -457,7 +457,7 @@ even if all other criteria pass.
   against the mapping; hook example tested for exit codes 0/1/2.
 * **W11 — `@audit_performance` / `track_memory()` helper.** [P1] New
   importable surface (first non-CLI surface — lives in the
-  `project_code_optimization` package, NOT the skill scripts dir). Total
+  `perf_gate` package, NOT the skill scripts dir). Total
   by construction (internal try/except; raises only with `strict=True`);
   near-zero overhead when disabled; calls `audit_concurrency()` (never the
   raw GIL check) so it degrades on baseline. Signature, defaults, and
@@ -504,8 +504,8 @@ even if all other criteria pass.
 
 12. As-Built Record (2026-09-09 — what actually shipped)
 
-All of W1–W12 is implemented in `src/project_code_optimization/skills/
-code-optimizer/scripts/` (flat scripts plus `detectors/`, `profilers/`,
+All of W1–W12 is implemented in `src/perf_gate/skills/
+perf-gate/scripts/` (flat scripts plus `detectors/`, `profilers/`,
 `resolvers/` packages; tests load them by file path via importlib):
 
 * W1 `tier_gate.py` + `tests/test_tier_gate.py` (build-flag detection,
@@ -528,7 +528,7 @@ code-optimizer/scripts/` (flat scripts plus `detectors/`, `profilers/`,
   `decide_keep`), W10 `templates/` (`pre_commit_example.sh`,
   `ci_static_example.yml`, `ci_gates_example.yml`,
   `ci_regression_example.yml`) + SKILL.md Phase 0–5 wiring,
-  W11 `src/project_code_optimization/auditing.py`
+  W11 `src/perf_gate/auditing.py`
   (`@audit_performance`, total by construction),
   W12 `detectors/bytecode_audit.py` (source-side `compile()`,
   advisory-only hints with fingerprints).

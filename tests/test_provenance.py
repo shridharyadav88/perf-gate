@@ -12,7 +12,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -21,9 +21,9 @@ def _load_module(name: str, rel_path: str):
     return module
 
 
-prov = _load_module("_test_provenance", "code-optimizer/scripts/provenance.py")
-gen = _load_module("_test_prov_gen", "code-optimizer/scripts/generate_baseline_csv.py")
-clf = _load_module("_test_prov_clf", "code-optimizer/scripts/classify_findings.py")
+prov = _load_module("_test_provenance", "perf-gate/scripts/provenance.py")
+gen = _load_module("_test_prov_gen", "perf-gate/scripts/generate_baseline_csv.py")
+clf = _load_module("_test_prov_clf", "perf-gate/scripts/classify_findings.py")
 
 
 def _quick_module(tmp_path):

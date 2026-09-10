@@ -1,4 +1,4 @@
-# Static-first CI for the code-optimizer skill (GitHub Actions).
+# Static-first CI for the perf-gate skill (GitHub Actions).
 #
 # This is the recommended front door: everything here is pure static
 # analysis -- AST parsing plus `ruff` -- so it runs in seconds with NO
@@ -45,12 +45,12 @@ jobs:
           BASE="origin/${{ github.base_ref }}"
           CHANGED=$(git diff --name-only "$BASE"...HEAD -- '*.py' | tr '\n' ' ')
           if [ -z "$CHANGED" ]; then echo "no Python changes"; exit 0; fi
-          SKILL=.agents/skills/code-optimizer
+          SKILL=.agents/skills/perf-gate
           python3 "$SKILL/scripts/detectors/static_audit.py" --files $CHANGED
       - name: Bytecode load audit on changed files (advisory, no execution)
         run: |
           BASE="origin/${{ github.base_ref }}"
           CHANGED=$(git diff --name-only "$BASE"...HEAD -- '*.py' | tr '\n' ' ')
           if [ -z "$CHANGED" ]; then echo "no Python changes"; exit 0; fi
-          SKILL=.agents/skills/code-optimizer
+          SKILL=.agents/skills/perf-gate
           python3 "$SKILL/scripts/detectors/bytecode_audit.py" --files $CHANGED

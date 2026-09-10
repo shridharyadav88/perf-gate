@@ -1,7 +1,7 @@
 """Tests for llm_harness.py (proposal parsing, gates, backends, cache).
 
 Loaded via importlib.resources like the other bundled scripts — their parent
-directory, ``code-optimizer``, contains a hyphen so it can't be an importable
+directory, ``perf-gate``, contains a hyphen so it can't be an importable
 package. All model HTTP is faked: no test here touches the network.
 """
 
@@ -18,7 +18,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -29,7 +29,7 @@ def _load_module(name: str, rel_path: str):
 
 harness = _load_module(
     "_test_llm_harness",
-    "code-optimizer/scripts/llm_harness.py",
+    "perf-gate/scripts/llm_harness.py",
 )
 
 GOOD_CODE = textwrap.dedent("""\
@@ -268,7 +268,7 @@ class TestOrchestration:
 class TestAdapterPlumbing:
     def test_profile_big_o_accepts_adapter_with_llm_provenance(self):
         big_o_mod = _load_module(
-            "_test_llm_big_o", "code-optimizer/scripts/profilers/run_big_o.py")
+            "_test_llm_big_o", "perf-gate/scripts/profilers/run_big_o.py")
 
         def total(xs):
             return sum(xs)
@@ -282,7 +282,7 @@ class TestAdapterPlumbing:
 
     def test_default_path_stays_synthetic(self):
         big_o_mod = _load_module(
-            "_test_llm_big_o2", "code-optimizer/scripts/profilers/run_big_o.py")
+            "_test_llm_big_o2", "perf-gate/scripts/profilers/run_big_o.py")
 
         def total(xs):
             return sum(xs)

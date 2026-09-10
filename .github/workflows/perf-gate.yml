@@ -20,6 +20,6 @@ jobs:
         run: pip install -e .[dev]
       - name: Gate touched functions vs base
         run: |
-          python3 src/project_code_optimization/skills/code-optimizer/scripts/pr_gate.py \
+          python3 src/perf_gate/skills/perf-gate/scripts/pr_gate.py \
             --base "${{ github.event.pull_request.base.sha }}" \
             --timeout 30 --stage-timeout 600

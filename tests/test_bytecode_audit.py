@@ -13,7 +13,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -23,7 +23,7 @@ def _load_module(name: str, rel_path: str):
 
 
 bc = _load_module(
-    "_test_bytecode_audit", "code-optimizer/scripts/detectors/bytecode_audit.py"
+    "_test_bytecode_audit", "perf-gate/scripts/detectors/bytecode_audit.py"
 )
 
 

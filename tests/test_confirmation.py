@@ -8,7 +8,7 @@ import sys
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -17,8 +17,8 @@ def _load_module(name: str, rel_path: str):
     return module
 
 
-conf = _load_module("_test_confirmation", "code-optimizer/scripts/confirmation.py")
-clf = _load_module("_test_conf_classify", "code-optimizer/scripts/classify_findings.py")
+conf = _load_module("_test_confirmation", "perf-gate/scripts/confirmation.py")
+clf = _load_module("_test_conf_classify", "perf-gate/scripts/classify_findings.py")
 
 
 class TestTier2Confirmed:

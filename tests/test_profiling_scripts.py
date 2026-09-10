@@ -1,4 +1,4 @@
-"""Tests for the profiling scripts bundled under the ``code-optimizer`` skill.
+"""Tests for the profiling scripts bundled under the ``perf-gate`` skill.
 
 Because the scripts live under ``skills/`` as package data we use
 :mod:`importlib.resources` to resolve their paths, then load and call the
@@ -20,7 +20,7 @@ import pytest
 
 def _load_module(name: str, rel_path: str):
     """Import a module from a path relative to the skills directory."""
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -29,10 +29,10 @@ def _load_module(name: str, rel_path: str):
 
 
 _big_o_mod = _load_module(
-    "_test_big_o", "code-optimizer/scripts/profilers/run_big_o.py"
+    "_test_big_o", "perf-gate/scripts/profilers/run_big_o.py"
 )
 _line_mod = _load_module(
-    "_test_line_profile", "code-optimizer/scripts/profilers/run_line_profile.py"
+    "_test_line_profile", "perf-gate/scripts/profilers/run_line_profile.py"
 )
 
 

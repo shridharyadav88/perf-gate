@@ -1,7 +1,7 @@
 """W4 resolver hardening: stale-plan fail-closed, idempotency, collateral, revert.
 
 Loaded via importlib by file path like the other bundled scripts -- the
-parent directory, ``code-optimizer``, contains a hyphen so it can't be an
+parent directory, ``perf-gate``, contains a hyphen so it can't be an
 importable package.
 """
 
@@ -17,7 +17,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -27,18 +27,18 @@ def _load_module(name: str, rel_path: str):
 
 
 hoist_analysis = _load_module(
-    "_test_hard_hoist_analysis", "code-optimizer/scripts/detectors/regex_hoist_analysis.py"
+    "_test_hard_hoist_analysis", "perf-gate/scripts/detectors/regex_hoist_analysis.py"
 )
 hoist_apply = _load_module(
-    "_test_hard_hoist_apply", "code-optimizer/scripts/resolvers/apply_regex_hoist.py"
+    "_test_hard_hoist_apply", "perf-gate/scripts/resolvers/apply_regex_hoist.py"
 )
 perf_analysis = _load_module(
     "_test_hard_perf_analysis",
-    "code-optimizer/scripts/detectors/perf_comprehension_analysis.py",
+    "perf-gate/scripts/detectors/perf_comprehension_analysis.py",
 )
 perf_apply = _load_module(
     "_test_hard_perf_apply",
-    "code-optimizer/scripts/resolvers/apply_perf_comprehension.py",
+    "perf-gate/scripts/resolvers/apply_perf_comprehension.py",
 )
 
 HOIST_CLEAN = textwrap.dedent(

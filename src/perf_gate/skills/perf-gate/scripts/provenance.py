@@ -29,7 +29,7 @@ import tier_gate  # noqa: E402
 SCHEMA_VERSION = 1
 
 try:
-    from project_code_optimization import __version__ as TOOL_VERSION
+    from perf_gate import __version__ as TOOL_VERSION
 except Exception:  # standalone skill deployment: package not importable
     TOOL_VERSION = "unknown"
 

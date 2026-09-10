@@ -1,5 +1,5 @@
 ---
-name: code-optimizer
+name: perf-gate
 description: Profiles Python code using Big-O scaling and line hit counts with an automated corrective unit-test verification loop.
 version: 1.0.0
 compatible_agents: ["claude-code", "gemini-cli", "cursor", "codex-cli"]
@@ -89,7 +89,7 @@ for line profiling. Three consequences:
 Run tier detection FIRST -- every gate below branches on it:
 
 ```bash
-python3 -c "import sys; sys.path.insert(0, '.agents/skills/code-optimizer/scripts'); import tier_gate; print(tier_gate.detect_python_tier())"
+python3 -c "import sys; sys.path.insert(0, '.agents/skills/perf-gate/scripts'); import tier_gate; print(tier_gate.detect_python_tier())"
 ```
 
 On a free-threaded build this prints a `RuntimeWarning` and returns `enhanced` (extra checks active, treat as experimental); otherwise `baseline`. Then run baseline checks in parallel before altering any source code, using
@@ -97,33 +97,33 @@ whichever `--target-type` fits the scope chosen in Phase 0:
 
 1. **Big-O Growth Analysis**:
    ```bash
-   python3 .agents/skills/code-optimizer/scripts/profilers/run_big_o.py --file <target_file> --func <func_name>
+   python3 .agents/skills/perf-gate/scripts/profilers/run_big_o.py --file <target_file> --func <func_name>
    # or, e.g.: --target-type repo --repo . | --target-type commit --commit <sha> | --target-type files --files a.py --files b.py
    ```
 
 2. **Line-by-Line Operation Profiling**:
    ```bash
-   python3 .agents/skills/code-optimizer/scripts/profilers/run_line_profile.py --file <target_file> --func <func_name>
+   python3 .agents/skills/perf-gate/scripts/profilers/run_line_profile.py --file <target_file> --func <func_name>
    # same --target-type options as above
    ```
    Only the target function itself is instrumented -- time spent inside functions it CALLS appears as a single line. To see hotspots inside a callee, profile that callee directly with explicit `--call-args`.
 
 3. **Static AST & Bytecode Audit** (no execution, all tiers):
    ```bash
-   python3 .agents/skills/code-optimizer/scripts/detectors/static_audit.py --files <f1.py> [<f2.py> ...]
-   python3 .agents/skills/code-optimizer/scripts/detectors/bytecode_audit.py --files <f1.py> [<f2.py> ...]
+   python3 .agents/skills/perf-gate/scripts/detectors/static_audit.py --files <f1.py> [<f2.py> ...]
+   python3 .agents/skills/perf-gate/scripts/detectors/bytecode_audit.py --files <f1.py> [<f2.py> ...]
    # advisory by default (exit 0 even with hints); --strict exits 1 on hints; --json emits fingerprints for diffing
    ```
 
 4. **Concurrency Gate** (tier-aware):
    ```bash
-   python3 .agents/skills/code-optimizer/scripts/profilers/concurrency.py [--json]
+   python3 .agents/skills/perf-gate/scripts/profilers/concurrency.py [--json]
    # enhanced tier: fails (exit 1) on GIL resurrection; baseline: informational pass
    ```
 
 5. **Memory Ceiling** (tier-aware thresholds):
    ```bash
-   python3 .agents/skills/code-optimizer/scripts/profilers/memory.py --baseline <bytes> --current <bytes>
+   python3 .agents/skills/perf-gate/scripts/profilers/memory.py --baseline <bytes> --current <bytes>
    # single universal ceiling: 2% on every tier (0.5% false-positives on free-threaded builds); tighten with --max-growth once measured
    ```
 
@@ -150,10 +150,10 @@ Analyze combined diagnostics:
 
 ### Integration decorator (`@audit_performance`)
 
-For local test runs, the importable helper `project_code_optimization.auditing` enforces time/memory budgets in-process (it calls the tier-aware concurrency probe, so it degrades correctly on baseline builds):
+For local test runs, the importable helper `perf_gate.auditing` enforces time/memory budgets in-process (it calls the tier-aware concurrency probe, so it degrades correctly on baseline builds):
 
 ```python
-from project_code_optimization import auditing
+from perf_gate import auditing
 
 @auditing.audit_performance(max_seconds=2.0, max_bytes=1_000_000)
 def my_function(...): ...
@@ -183,7 +183,7 @@ Rerun `run_big_o.py` and `run_line_profile.py`.
 
 ## Phase 4: Final Reporting
 
-Format output using template at `.agents/skills/code-optimizer/templates/report_template.md`.
+Format output using template at `.agents/skills/perf-gate/templates/report_template.md`.
 
 ### Baseline-only assessments (no refactor)
 
@@ -191,7 +191,7 @@ If the request is to *find and report* issues rather than fix them — or the
 target is broad enough (a file, several files, a commit, or the whole repo)
 that fixing everything in one pass isn't the goal — skip Phase 3 entirely.
 Run Phase 1 profiling with the appropriate `--target-type`, then report using
-`.agents/skills/code-optimizer/templates/baseline_report_template.md` instead.
+`.agents/skills/perf-gate/templates/baseline_report_template.md` instead.
 That template has no "after"/"optimizations applied" sections and requires
 every finding to be listed **most severe to least severe**, using the same
 complexity-rank-then-hotspot-magnitude criteria the scripts themselves use to
@@ -204,7 +204,7 @@ another tool, or because the target has too many functions for prose to be
 useful — skip the template entirely and run:
 
 ```bash
-python3 .agents/skills/code-optimizer/scripts/generate_baseline_csv.py \
+python3 .agents/skills/perf-gate/scripts/generate_baseline_csv.py \
   --target-type file --file <target_file> \
   [--output report.csv]
 ```
@@ -266,7 +266,7 @@ first.
 ### 5.1 Classify (deterministic, zero tokens)
 
 ```bash
-python3 .agents/skills/code-optimizer/scripts/classify_findings.py \
+python3 .agents/skills/perf-gate/scripts/classify_findings.py \
   --input baseline.csv --output classified.csv
 ```
 
@@ -325,27 +325,27 @@ its matches in one pass):
 
 ```bash
 # tier0_regex_hoist rows:
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_regex_hoist.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_regex_hoist.py --file <path>
 # tier0_perf401 / tier0_perf402 rows:
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_perf_comprehension.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_perf_comprehension.py --file <path>
 # tier0_str_join / tier0_sum_reduce rows:
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_accumulator.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_accumulator.py --file <path>
 # tier0_re_call rows:
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_re_call.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_re_call.py --file <path>
 # tier0_consumer_list / tier0_sorted_minmax / tier0_literal_membership /
 #   tier0_list_cast / tier0_logging_lazy / tier0_dict_keys /
 #   tier0_async_sleep / tier0_enumerate / tier0_rematch_search /
 #   tier0_except_hoist rows (one applier per tier):
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_consumer.py --file <path>
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_sorted_minmax.py --file <path>
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_membership.py --file <path>
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_list_cast.py --file <path>
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_logging_lazy.py --file <path>
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_dict_keys.py --file <path>
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_async_sleep.py --file <path>
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_enumerate.py --file <path>
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_rematch_search.py --file <path>
-python3 .agents/skills/code-optimizer/scripts/resolvers/apply_try_hoist.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_consumer.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_sorted_minmax.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_membership.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_list_cast.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_logging_lazy.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_dict_keys.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_async_sleep.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_enumerate.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_rematch_search.py --file <path>
+python3 .agents/skills/perf-gate/scripts/resolvers/apply_try_hoist.py --file <path>
 # add --dry-run first if you want to see the plan before writing
 ```
 
@@ -354,7 +354,7 @@ re-measures, and keeps the rewrite only if the gain clears the margin
 (reverting byte-identical otherwise):
 
 ```bash
-python3 .agents/skills/code-optimizer/scripts/apply_and_verify.py --file <path> --func <name>
+python3 .agents/skills/perf-gate/scripts/apply_and_verify.py --file <path> --func <name>
 # --tier <any tier short name> (default: auto tries each in priority order),
 #   --min-improvement (default: 0.10)
 ```
@@ -420,7 +420,7 @@ CSV (plus its `.inputs.json` sidecar when present) to Markdown instead of
 handing back raw rows:
 
 ```bash
-python3 .agents/skills/code-optimizer/scripts/render_action_list.py --input classified.csv --top 10
+python3 .agents/skills/perf-gate/scripts/render_action_list.py --input classified.csv --top 10
 # add --inputs baseline.inputs.json for honest Big-O labels (measured vs unmeasured)
 ```
 

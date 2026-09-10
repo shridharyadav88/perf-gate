@@ -1,4 +1,4 @@
-# Example CI gates for the code-optimizer skill (GitHub Actions).
+# Example CI gates for the perf-gate skill (GitHub Actions).
 #
 # POLICY (fail-closed in CI, per the gate contract):
 #   * any gate finding with status "fail"            -> build fails (exit 1)
@@ -33,7 +33,7 @@ jobs:
           BASE="origin/${{ github.base_ref }}"
           CHANGED=$(git diff --name-only "$BASE"...HEAD -- '*.py' | tr '\n' ' ')
           if [ -z "$CHANGED" ]; then echo "no Python changes"; exit 0; fi
-          SKILL=.agents/skills/code-optimizer
+          SKILL=.agents/skills/perf-gate
           # Full hint lists for the log (advisory)...
           python3 "$SKILL/scripts/detectors/static_audit.py" --files $CHANGED
           # ...but the gate compares fingerprint SETS: only newly introduced
@@ -53,7 +53,7 @@ jobs:
           python-version: "3.12"
       - name: GIL / parallelism audit
         run: |
-          python3 .agents/skills/code-optimizer/scripts/profilers/concurrency.py --json
+          python3 .agents/skills/perf-gate/scripts/profilers/concurrency.py --json
 
   memory-gate:
     runs-on: ubuntu-latest
@@ -67,7 +67,7 @@ jobs:
           # Wire BASE/CURRENT to your own measured bytes (e.g. tracemalloc
           # snapshots via profilers/memory.py helpers around the test run).
           # The gate fails closed on breach (1) and on harness error (2).
-          python3 .agents/skills/code-optimizer/scripts/profilers/memory.py \
+          python3 .agents/skills/perf-gate/scripts/profilers/memory.py \
             --baseline "$BASE_BYTES" --current "$CURRENT_BYTES" \
             --max-growth 0.02
 
@@ -80,7 +80,7 @@ jobs:
           python-version: "3.12"
       - name: Baseline CSV + tier dispatch
         run: |
-          SKILL=.agents/skills/code-optimizer
+          SKILL=.agents/skills/perf-gate
           python3 "$SKILL/scripts/generate_baseline_csv.py" \
             --target-type repo --repo . --output baseline.csv
           # Fails closed (exit 2) on missing/stale provenance or schema drift.

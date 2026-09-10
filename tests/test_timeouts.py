@@ -1,7 +1,7 @@
 """Tests for W2 execution containment (timeouts turn hangs into error rows).
 
 Loaded via importlib by file path like the other bundled scripts -- the
-parent directory, ``code-optimizer``, contains a hyphen so it can't be an
+parent directory, ``perf-gate``, contains a hyphen so it can't be an
 importable package.
 """
 
@@ -17,7 +17,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -27,15 +27,15 @@ def _load_module(name: str, rel_path: str):
 
 
 timeouts_mod = _load_module(
-    "_test_to_timeouts", "code-optimizer/scripts/profilers/timeouts.py"
+    "_test_to_timeouts", "perf-gate/scripts/profilers/timeouts.py"
 )
 big_o_mod = _load_module(
-    "_test_to_big_o", "code-optimizer/scripts/profilers/run_big_o.py"
+    "_test_to_big_o", "perf-gate/scripts/profilers/run_big_o.py"
 )
 line_mod = _load_module(
-    "_test_to_line", "code-optimizer/scripts/profilers/run_line_profile.py"
+    "_test_to_line", "perf-gate/scripts/profilers/run_line_profile.py"
 )
-gen_mod = _load_module("_test_to_gen", "code-optimizer/scripts/generate_baseline_csv.py")
+gen_mod = _load_module("_test_to_gen", "perf-gate/scripts/generate_baseline_csv.py")
 
 
 def _hang_forever():

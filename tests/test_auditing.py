@@ -1,4 +1,4 @@
-"""Tests for project_code_optimization.auditing (W11: total decorator)."""
+"""Tests for perf_gate.auditing (W11: total decorator)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import warnings
 
 import pytest
 
-from project_code_optimization import auditing
+from perf_gate import auditing
 
 
 def test_bare_decorator_preserves_behavior_and_metadata():
@@ -152,9 +152,9 @@ class TestTrackMemory:
 
 def test_skill_documents_decorator_contract():
     text = (
-        importlib.resources.files("project_code_optimization")
+        importlib.resources.files("perf_gate")
         / "skills"
-        / "code-optimizer"
+        / "perf-gate"
         / "SKILL.md"
     ).read_text(encoding="utf-8")
     for token in ("audit_performance", "PerformanceViolation", "enabled=False", "strict=True"):
@@ -163,9 +163,9 @@ def test_skill_documents_decorator_contract():
 
 def test_skill_documents_probe_learnings():
     text = (
-        importlib.resources.files("project_code_optimization")
+        importlib.resources.files("perf_gate")
         / "skills"
-        / "code-optimizer"
+        / "perf-gate"
         / "SKILL.md"
     ).read_text(encoding="utf-8")
     # Gap 2: direct-file-load harness recipe for heavy package inits.

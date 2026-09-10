@@ -1,9 +1,22 @@
-# project-code-optimization
+# perf-gate
 
-Enterprise-grade Agent Skills package for deterministic Python performance
-work: empirical Big-O profiling, line-by-line hotspot profiling, measured
-cProfile heat ranking, mechanical tier0 fixes with keep-or-revert
-verification, and CI regression gates — stdlib only, zero tokens.
+A deterministic pre-merge performance gate for Python: it profiles only
+the functions your diff touches, fails the PR solely on measured,
+introduced regressions, and proposes mechanical fixes for the cheap,
+certain cases. What it does not do: find architectural problems (N+1
+queries, missing indexes, chatty RPCs) — those need production telemetry,
+and this tool will never claim otherwise.
+
+- **Diff-scoped PR gate** — `pr_gate.py --base <sha>`: touched functions
+  profiled on both sides (base in an isolated worktree); rank worsening
+  and newly-introduced tier0 fail, drift advises, unmeasurable targets skip
+- **Empirical Big-O curve fitting** via `big-O`, **line hotspots** via
+  `line_profiler`, **measured heat lane** via cProfile share ranking
+- **Mechanical tier0 fixes** — 19 deterministic tiers applied by
+  `apply_and_verify.py`, kept only if a `perf_counter` min-of-5 re-measure
+  clears the 10% margin, else pre-apply bytes restored
+- Deterministic lanes are stdlib only, zero tokens; the small-model input
+  synthesis fallback is opt-in (`--llm-harness`)
 
 - **Empirical Big-O curve fitting** via `big-O`
 - **Line-by-line operation profiling** via `line_profiler`
@@ -40,13 +53,13 @@ pip install build
 python3 -m build
 
 # 3. Install from the local wheel
-pip install dist/project_code_optimization-0.1.0-py3-none-any.whl
+pip install dist/perf_gate-0.1.0-py3-none-any.whl
 
 # 4. Deploy skills into your current project
 install-agent-skills
 
 # 5. Verify
-ls .agents/skills/code-optimizer/
+ls .agents/skills/perf-gate/
 ```
 
 A second `install-agent-skills` run creates a timestamped backup of the
@@ -61,7 +74,7 @@ the `SKILL.md` frontmatter:
 
 ```yaml
 ---
-name: code-optimizer
+name: perf-gate
 description: Profiles Python code using Big-O scaling and line hit counts with
   an automated corrective unit-test verification loop.
 ---
@@ -69,15 +82,15 @@ description: Profiles Python code using Big-O scaling and line hit counts with
 
 | Agent       | Discovery path                |
 | ----------- | ----------------------------- |
-| Claude Code | `.agents/skills/code-optimizer/SKILL.md` |
-| Cursor      | `.agents/skills/code-optimizer/SKILL.md` |
-| Gemini CLI  | `.agents/skills/code-optimizer/SKILL.md` |
-| Codex CLI   | `.agents/skills/code-optimizer/SKILL.md` |
+| Claude Code | `.agents/skills/perf-gate/SKILL.md` |
+| Cursor      | `.agents/skills/perf-gate/SKILL.md` |
+| Gemini CLI  | `.agents/skills/perf-gate/SKILL.md` |
+| Codex CLI   | `.agents/skills/perf-gate/SKILL.md` |
 
 ### Profiling Scripts
 
 ```bash
-SK=.agents/skills/code-optimizer/scripts
+SK=.agents/skills/perf-gate/scripts
 
 # Big-O empirical estimation
 python3 $SK/profilers/run_big_o.py \
@@ -96,7 +109,7 @@ python3 $SK/profilers/run_line_profile.py \
 ### Full Pipeline (scan → classify → action list)
 
 ```bash
-SK=.agents/skills/code-optimizer/scripts
+SK=.agents/skills/perf-gate/scripts
 
 # 1. Baseline CSV: Big-O + line hotspots for every function in scope
 python3 $SK/generate_baseline_csv.py --target-type file \
@@ -123,7 +136,7 @@ python3 $SK/render_action_list.py --input classified.csv \
 ### Apply a Tier0 Fix (keep-or-revert)
 
 ```bash
-SK=.agents/skills/code-optimizer/scripts
+SK=.agents/skills/perf-gate/scripts
 
 # Preview only — never writes
 python3 $SK/apply_and_verify.py --file src/my_module.py \
@@ -162,16 +175,16 @@ Exit codes:
 
 1. Create the skill directory:
    ```
-   src/project_code_optimization/skills/<skill-name>/
+   src/perf_gate/skills/<skill-name>/
    ├── SKILL.md          # required — open-standard frontmatter
    ├── scripts/          # optional — executable helpers
    └── templates/        # optional — output templates
    ```
 
-2. Register the skill in `src/project_code_optimization/__init__.py`:
+2. Register the skill in `src/perf_gate/__init__.py`:
    ```python
    BUNDLED_SKILLS = {
-       "code-optimizer": "skills/code_optimizer",
+       "perf-gate": "skills/perf_gate",
        "my-new-skill": "skills/my_new_skill",    # ← add this line
    }
    ```

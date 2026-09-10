@@ -14,7 +14,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -24,7 +24,7 @@ def _load_module(name: str, rel_path: str):
 
 
 audit = _load_module(
-    "_test_pipe_audit", "code-optimizer/scripts/detectors/static_audit.py"
+    "_test_pipe_audit", "perf-gate/scripts/detectors/static_audit.py"
 )
 
 CLEAN = "def f(xs):\n    return sorted(xs)\n"
@@ -83,16 +83,16 @@ class TestAuditCLI:
 
 def _skill_dir():
     return (
-        importlib.resources.files("project_code_optimization")
+        importlib.resources.files("perf_gate")
         / "skills"
-        / "code-optimizer"
+        / "perf-gate"
     )
 
 
 def _make_repo(tmp_path, files: dict):
     """Init a git repo with the skill 'deployed' and *files* staged."""
     repo = tmp_path / "repo"
-    target = repo / ".agents" / "skills" / "code-optimizer"
+    target = repo / ".agents" / "skills" / "perf-gate"
     target.parent.mkdir(parents=True)
     os.symlink(_skill_dir(), target, target_is_directory=True)
     for name, content in files.items():
@@ -106,7 +106,7 @@ def _make_repo(tmp_path, files: dict):
 
 def _run_hook(repo, strict=False):
     hook = (
-        repo / ".agents" / "skills" / "code-optimizer"
+        repo / ".agents" / "skills" / "perf-gate"
         / "templates" / "pre_commit_example.sh"
     )
     env = dict(os.environ)

@@ -2,7 +2,7 @@
 
 The first importable (non-CLI) surface of this package::
 
-    from project_code_optimization import auditing
+    from perf_gate import auditing
 
     @auditing.audit_performance(max_seconds=2.0, max_bytes=1_000_000)
     def my_function(...):

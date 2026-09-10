@@ -191,7 +191,7 @@ def _ensure_parent_stubs(file_path: str) -> str | None:
 
     for parent in parents:
         existing = sys.modules.get(parent)
-        if existing is not None and not getattr(existing, "_code_optimizer_stub", False):
+        if existing is not None and not getattr(existing, "_perf_gate_stub", False):
             if _inside_root(_module_roots(existing), repo_root):
                 continue  # the target tree itself; never overwrite it
             # A real but FOREIGN package (same name imported earlier from
@@ -205,7 +205,7 @@ def _ensure_parent_stubs(file_path: str) -> str | None:
             parent_dir = str(Path(parent_dir) / bit)
         stub = types.ModuleType(parent)
         stub.__path__ = [parent_dir]  # type: ignore[attr-defined]
-        stub._code_optimizer_stub = True  # type: ignore[attr-defined]
+        stub._perf_gate_stub = True  # type: ignore[attr-defined]
         sys.modules[parent] = stub
 
     return fullname

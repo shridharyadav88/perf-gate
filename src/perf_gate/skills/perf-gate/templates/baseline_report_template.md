@@ -91,4 +91,4 @@ _Repeat this subsection for every assessed function, in severity order._
 | -------- | ------------------ | ------------------------------------------- |
 | `<label>`| `<file>` :: `<func>` | `<e.g. "collapse nested loop, expect O(n²)→O(n)">` |
 
-This report captures a baseline only. Re-run the `code-optimizer` skill's Phase 3 corrective loop against the highest-severity entries above, then record before/after results with `report_template.md`.
+This report captures a baseline only. Re-run the `perf-gate` skill's Phase 3 corrective loop against the highest-severity entries above, then record before/after results with `report_template.md`.

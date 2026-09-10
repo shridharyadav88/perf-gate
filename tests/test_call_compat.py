@@ -11,7 +11,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -21,13 +21,13 @@ def _load_module(name: str, rel_path: str):
 
 
 tres = _load_module(
-    "_test_cc_resolution", "code-optimizer/scripts/profilers/target_resolution.py"
+    "_test_cc_resolution", "perf-gate/scripts/profilers/target_resolution.py"
 )
 big_o_mod = _load_module(
-    "_test_cc_big_o", "code-optimizer/scripts/profilers/run_big_o.py"
+    "_test_cc_big_o", "perf-gate/scripts/profilers/run_big_o.py"
 )
 line_mod = _load_module(
-    "_test_cc_line", "code-optimizer/scripts/profilers/run_line_profile.py"
+    "_test_cc_line", "perf-gate/scripts/profilers/run_line_profile.py"
 )
 
 
@@ -138,7 +138,7 @@ class TestPackageContextLoading:
         monkeypatch.syspath_prepend(str(tmp_path))
         module = tres.load_module_at_path(str(pkg / "mod.py"))
         assert module.f() == "from-real-init"
-        assert not getattr(sys.modules["realpkg"], "_code_optimizer_stub", False)
+        assert not getattr(sys.modules["realpkg"], "_perf_gate_stub", False)
 
     def test_foreign_install_never_shadows_target_tree(self, tmp_path, monkeypatch):
         proj = tmp_path / "proj"

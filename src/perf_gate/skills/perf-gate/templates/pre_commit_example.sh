@@ -1,10 +1,10 @@
 #!/bin/sh
-# Example pre-commit hook for the code-optimizer skill: static AST audit of
+# Example pre-commit hook for the perf-gate skill: static AST audit of
 # staged Python files (nested loops, in-loop global loads).
 #
 # INSTALL (manual -- the `install-agent-skills` installer NEVER writes hooks
 # on your behalf; hooks execute code on every commit and must be opt-in):
-#   cp .agents/skills/code-optimizer/templates/pre_commit_example.sh \
+#   cp .agents/skills/perf-gate/templates/pre_commit_example.sh \
 #      .git/hooks/pre-commit
 #   chmod +x .git/hooks/pre-commit
 #
@@ -16,7 +16,7 @@
 #     uninstalled within a week; CI (not this hook) is where gates close.
 set -u
 
-SKILL_DIR=".agents/skills/code-optimizer"
+SKILL_DIR=".agents/skills/perf-gate"
 AUDIT="$SKILL_DIR/scripts/detectors/static_audit.py"
 
 STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
@@ -25,7 +25,7 @@ if [ -z "$STAGED" ]; then
 fi
 
 if [ ! -f "$AUDIT" ]; then
-  echo "code-optimizer hook: skill not deployed at $SKILL_DIR; skipping (fail-open)."
+  echo "perf-gate hook: skill not deployed at $SKILL_DIR; skipping (fail-open)."
   exit 0
 fi
 
@@ -39,7 +39,7 @@ fi
 CODE=$?
 
 if [ "$CODE" -eq 2 ]; then
-  echo "code-optimizer hook: audit harness errored; not blocking commit (fail-open)."
+  echo "perf-gate hook: audit harness errored; not blocking commit (fail-open)."
   exit 0
 fi
 exit "$CODE"

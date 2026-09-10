@@ -1,7 +1,7 @@
 """Tests for generate_baseline_csv.py — the no-LLM CSV baseline report generator.
 
 Loaded via importlib.resources, same as the other bundled scripts (its parent
-directory, ``code-optimizer``, contains a hyphen so it can't be an importable
+directory, ``perf-gate``, contains a hyphen so it can't be an importable
 package).
 """
 
@@ -19,7 +19,7 @@ import pytest
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -28,7 +28,7 @@ def _load_module(name: str, rel_path: str):
 
 
 _gen = _load_module(
-    "_test_generate_baseline_csv", "code-optimizer/scripts/generate_baseline_csv.py",
+    "_test_generate_baseline_csv", "perf-gate/scripts/generate_baseline_csv.py",
 )
 
 build_rows = _gen.build_rows

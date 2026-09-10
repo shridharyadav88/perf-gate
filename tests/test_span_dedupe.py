@@ -1,7 +1,7 @@
 """Tests for detectors/span_dedupe.py (nested-function duplicate removal).
 
 Loaded via importlib.resources like the other bundled scripts — their parent
-directory, ``code-optimizer``, contains a hyphen so it can't be an importable
+directory, ``perf-gate``, contains a hyphen so it can't be an importable
 package.
 """
 
@@ -16,7 +16,7 @@ from types import SimpleNamespace
 
 
 def _load_module(name: str, rel_path: str):
-    pkg_skills = importlib.resources.files("project_code_optimization") / "skills"
+    pkg_skills = importlib.resources.files("perf_gate") / "skills"
     script_path = pkg_skills / rel_path
     spec = importlib.util.spec_from_file_location(name, str(script_path))
     module = importlib.util.module_from_spec(spec)
@@ -27,7 +27,7 @@ def _load_module(name: str, rel_path: str):
 
 dedupe_mod = _load_module(
     "_test_span_dedupe",
-    "code-optimizer/scripts/detectors/span_dedupe.py",
+    "perf-gate/scripts/detectors/span_dedupe.py",
 )
 
 dedupe_nested_spans = dedupe_mod.dedupe_nested_spans
