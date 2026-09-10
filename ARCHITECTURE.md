@@ -539,14 +539,50 @@ Post-spec additions (same stdlib-only, deterministic contract):
   hotspots per function) → `classify_findings.py` (deterministic
   tiers) → `render_action_list.py` (Markdown action list: Fix-now,
   Review, By-design/errors, Ruff PERF).
-* Tier0 universe (9, in priority order): `tier0_regex_hoist`,
+* Tier0 universe (19, in priority order): `tier0_regex_hoist`,
   `tier0_re_call`, `tier0_perf402`, `tier0_perf401`, `tier0_perf403`,
   `tier0_str_join`, `tier0_sum_reduce`, `tier0_set_build`,
-  `tier0_invariant_hoist` — each routable to a mechanical applier in
-  `resolvers/` (the accumulator trio shares one detector/applier
-  pair), all driven by an `apply_and_verify.py` loop that keeps the
-  rewrite only if a re-measure clears the margin, else restores
-  pre-apply bytes.
+  `tier0_invariant_hoist`, `tier0_consumer_list`, `tier0_sorted_minmax`,
+  `tier0_literal_membership`, `tier0_list_cast`, `tier0_logging_lazy`,
+  `tier0_dict_keys`, `tier0_async_sleep`, `tier0_enumerate`,
+  `tier0_rematch_search`, `tier0_except_hoist` — each routable to a
+  mechanical applier in `resolvers/` (the accumulator trio shares one
+  detector/applier pair; every span-edit tier carries its own
+  detector/applier pair plus a shared `span_edit.splice` primitive),
+  all driven by an `apply_and_verify.py` loop that keeps the rewrite
+  only if a re-measure clears the margin, else restores pre-apply
+  bytes.
+* Span-tier hardening (crawl4ai field findings): `detectors/span_dedupe.py`
+  collapses nested-function duplicate candidates (identical edit spans
+  reported under both outer and inner scopes) onto the innermost scope —
+  previously the pair made `span_edit.splice` refuse the whole file and
+  inflated per-function counts; `enumerate` additionally skips index-only
+  loops (index read but never subscripted — the rewrite would only add an
+  unused name). Covered by `tests/test_span_dedupe.py`,
+  `tests/test_nested_attribution.py` (all ten span tiers), and new
+  `test_enumerate.py` cases.
+* Scope-chain audit (all 15 tier0 detectors): every rewrite-introduced or
+  rewrite-dropped builtin must resolve identically at the span — checked
+  via `span_dedupe.scope_binds` (own scope: params, assigns, imports,
+  except/with/for/walrus targets, nested def/class names, lambda params,
+  global/nonlocal declarations) plus `chain_blocked` (innermost scope
+  holding the line through every enclosing function; classes contribute
+  nothing) plus opt-in `module_binds`. Closed 12 gaps, e.g. param/closure
+  `sum` with the `len(...)`→`sum(1 for ...)` rewrite, param/closure
+  `min`/`max`/`list`/`dict`/`set`/`re`/`asyncio`, missing module checks
+  for `sum_reduce`/`perf402`, closure-var patterns and param receivers
+  for `regex_hoist` (now requires import-time-bound patterns and a plain
+  top-level `import re`), and `re_call` receiver/hoisted-name collisions
+  (the latter now renames to `_re_sub_2` instead of firing). `membership`,
+  `logging_lazy`, `try_hoist`, `perf401`, `str_join`, and
+  `invariant_hoist` are clean by construction (no name dependencies, or
+  nested scopes never descended). Field effect on crawl4ai: 9 findings
+  dropped, each verified a true skip (zero-benefit loops, collapsed
+  duplicates, function-local `import re` that a module hoist would have
+  broken) — no valid fix lost. Residuals (documented, not fixed):
+  conditional module-level rebinds (`if c: sum = 5`), runtime rebinding
+  via `global` from another function, and lambda/comprehension-var
+  shadowing inside the span expression itself.
 * Provenance loop: `mine_callsites.py` sketches harness wrappers from
   real call sites (approved harnesses carry `__big_o_provenance__`,
   the only thing promoting a row past "synthetic"); `tier1_propose.py`

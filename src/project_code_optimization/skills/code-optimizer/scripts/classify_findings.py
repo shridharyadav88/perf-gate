@@ -18,6 +18,30 @@ it can be fixed automatically or which kind of model to spend tokens on:
                          list comprehension (see
                          perf_comprehension_analysis.py). Same static-only
                          guarantee as tier0_regex_hoist.
+  tier0_consumer_list -- an eager list fed to a single-pass consumer
+                         (sum/min/.../len/join) is safe to stream as a
+                         generator (see consumer_analysis.py).
+  tier0_sorted_minmax -- sorted(...)[0/-1] is safe to collapse to
+                         min(...)/max(...) (see sorted_minmax_analysis.py).
+  tier0_literal_membership -- `x in [literals]` is safe to test against a
+                         set literal (see membership_analysis.py).
+  tier0_list_cast     -- list(...) around a fresh temporary in loop
+                         position is safe to drop (see
+                         list_cast_analysis.py).
+  tier0_logging_lazy  -- an eager logging f-string/.format is safe to pass
+                         as lazy %-args (see logging_lazy_analysis.py).
+  tier0_dict_keys     -- `for k in d.keys()` is safe to iterate as
+                         `for k in d` (see dict_keys_analysis.py).
+  tier0_async_sleep   -- time.sleep(...) in an async function is safe to
+                         await as asyncio.sleep(...) (see
+                         async_sleep_analysis.py).
+  tier0_enumerate     -- for i in range(len(x)) with x[i] reads is safe to
+                         iterate as enumerate (see enumerate_analysis.py).
+  tier0_rematch_search -- re.match(".*pat", ...) in a boolean test is safe
+                         to search directly (see rematch_search_analysis.py).
+  tier0_except_hoist  -- a per-iteration try/except whose handlers all
+                         exit is safe to hoist around the loop (see
+                         try_hoist_analysis.py).
   tier2_algorithmic   -- empirical complexity_rank >= 4 (Quadratic or worse).
                          Needs an actual algorithm redesign; route to a
                          capable model, not a small one.
@@ -46,11 +70,21 @@ import confirmation as confirmation_mod  # noqa: E402
 import provenance as provenance_mod  # noqa: E402
 from detectors import (
     accumulator_analysis,  # noqa: E402
+    async_sleep_analysis,  # noqa: E402
+    consumer_analysis,  # noqa: E402
+    dict_keys_analysis,  # noqa: E402
+    enumerate_analysis,  # noqa: E402
     invariant_hoist_analysis,  # noqa: E402
+    list_cast_analysis,  # noqa: E402
+    logging_lazy_analysis,  # noqa: E402
+    membership_analysis,  # noqa: E402
     perf_comprehension_analysis,  # noqa: E402
     re_call_analysis,  # noqa: E402
     regex_hoist_analysis,  # noqa: E402
+    rematch_search_analysis,  # noqa: E402
+    sorted_minmax_analysis,  # noqa: E402
     static_audit,  # noqa: E402
+    try_hoist_analysis,  # noqa: E402
 )
 
 OUTPUT_FIELDNAMES_SUFFIX = ["tier", "tier_detail"]
@@ -60,7 +94,10 @@ OUTPUT_FIELDNAMES_SUFFIX = ["tier", "tier_detail"]
 _TIER0_PRIORITY = (
     "tier0_regex_hoist", "tier0_re_call", "tier0_perf402", "tier0_perf401",
     "tier0_perf403", "tier0_str_join", "tier0_sum_reduce", "tier0_set_build",
-    "tier0_invariant_hoist",
+    "tier0_invariant_hoist", "tier0_consumer_list", "tier0_sorted_minmax",
+    "tier0_literal_membership", "tier0_list_cast", "tier0_logging_lazy",
+    "tier0_dict_keys", "tier0_async_sleep", "tier0_enumerate",
+    "tier0_rematch_search", "tier0_except_hoist",
 )
 
 
@@ -121,7 +158,36 @@ def _tier0_functions(file_path: str) -> dict[str, tuple[str, str]]:
         detail = (f"hoist loop-invariant '{cand.name}' to '{cand.alias}' "
                   f"({len(cand.loads)} load(s))")
         _merge_tier0(result, cand.func_name, "tier0_invariant_hoist", detail)
+    for module, tier in (
+        (consumer_analysis, "tier0_consumer_list"),
+        (sorted_minmax_analysis, "tier0_sorted_minmax"),
+        (membership_analysis, "tier0_literal_membership"),
+        (list_cast_analysis, "tier0_list_cast"),
+        (logging_lazy_analysis, "tier0_logging_lazy"),
+        (dict_keys_analysis, "tier0_dict_keys"),
+        (async_sleep_analysis, "tier0_async_sleep"),
+        (enumerate_analysis, "tier0_enumerate"),
+        (rematch_search_analysis, "tier0_rematch_search"),
+        (try_hoist_analysis, "tier0_except_hoist"),
+    ):
+        _merge_plan_module(result, file_path, module, tier)
     return result
+
+
+def _merge_plan_module(result: dict[str, tuple[str, str]], file_path: str,
+                       module, tier: str) -> None:
+    """Merge one span-edit detector's safe candidates under *tier*.
+
+    Every span-edit candidate already carries its human-readable
+    ``detail``; failures to read/parse the file fall through to the
+    other tier checks (matching the per-detector convention above).
+    """
+    try:
+        plan = module.analyze_file(file_path)
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return
+    for cand in plan.safe:
+        _merge_tier0(result, cand.func_name, tier, cand.detail)
 
 
 def _merge_tier0(

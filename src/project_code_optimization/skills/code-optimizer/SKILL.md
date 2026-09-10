@@ -284,6 +284,16 @@ execution, no LLM:
 | `tier0_invariant_hoist` | A loop-invariant module-global load is provably safe to hoist to a pre-loop local (see 5.2). Names only -- attribute loads stay report-only. |
 | `tier0_perf403`       | A `d = {}` + `for ...: d[k] = v` loop is provably safe to collapse into a dict comprehension or `dict(...)` (see 5.2). Same static-only guarantee as `tier0_regex_hoist`; PERF403 hits ours cover are deduped in our favor. |
 | `tier0_set_build`     | A `seen = set()` + `for ...: seen.add(...)` loop is provably safe to collapse into `set(...)` (see 5.2). Same static-only guarantee as `tier0_regex_hoist`, plus a no-rebinding check on the name `set`. |
+| `tier0_consumer_list` | An eager list fed to a single-pass consumer (`sum`/`min`/`len`/`join`/...) is provably safe to stream as a generator (see 5.2). `any`/`all` additionally require pure element expressions. |
+| `tier0_sorted_minmax` | `sorted(...)[0]` / `[-1]` with no `key=` is provably safe to collapse to `min(...)` / `max(...)` (see 5.2). |
+| `tier0_literal_membership` | `x in [...]` over 3+ constant elements is provably safe to test against a set literal (see 5.2). |
+| `tier0_list_cast`     | `list(...)` around a provably-fresh temporary in loop position is safe to drop (see 5.2). Bare names keep their snapshot. |
+| `tier0_logging_lazy`  | An eager logging f-string / `.format` with exactly-translatable fields is safe to pass as lazy `%`-args (see 5.2). |
+| `tier0_dict_keys`     | `for k in d.keys()` is safe to iterate as `for k in d` when the body never mutates `d` (see 5.2). |
+| `tier0_async_sleep`   | `time.sleep(...)` inside an async function (with `asyncio` imported) is safe to `await asyncio.sleep(...)` (see 5.2). |
+| `tier0_enumerate`     | `for i in range(len(x))` with `x[i]` reads and no length mutation is safe to iterate as `enumerate` (see 5.2). |
+| `tier0_rematch_search` | `re.match(".*pat", ...)` with proven DOTALL in a boolean test is safe to `re.search("pat", ...)` (see 5.2). |
+| `tier0_except_hoist`  | A per-iteration `try/except` whose handlers all `raise`/`return` is safe to hoist around the loop (see 5.2). |
 | `tier2_algorithmic`   | `complexity_rank >= 4` (Quadratic or worse). Needs a real algorithm change. |
 | `tier1_review`        | Profiling succeeded, no complexity problem, no known mechanical pattern. |
 | `not_actionable`      | Neither profiling nor static analysis produced anything to act on.       |
@@ -293,7 +303,7 @@ certain than a model-driven rewrite even for a row that also happens to show
 high complexity, so take the free win first and re-profile afterward; if the
 complexity problem is still there, it'll show up as `tier2` on the next pass.
 When one function hits several tier0 patterns, the row keeps the
-highest-priority tier (`regex_hoist` > `re_call` > `perf402` > `perf401` > `perf403` > `str_join` > `sum_reduce` > `set_build` > `invariant_hoist`) with all details
+highest-priority tier (`regex_hoist` > `re_call` > `perf402` > `perf401` > `perf403` > `str_join` > `sum_reduce` > `set_build` > `invariant_hoist` > `consumer_list` > `sorted_minmax` > `literal_membership` > `list_cast` > `logging_lazy` > `dict_keys` > `async_sleep` > `enumerate` > `rematch_search` > `except_hoist`) with all details
 joined in `tier_detail` — run every matching applier below, then re-profile.
 
 **Ruff PERF lane (detection only, no new tiers).** Our AST detectors cover
@@ -322,6 +332,20 @@ python3 .agents/skills/code-optimizer/scripts/resolvers/apply_perf_comprehension
 python3 .agents/skills/code-optimizer/scripts/resolvers/apply_accumulator.py --file <path>
 # tier0_re_call rows:
 python3 .agents/skills/code-optimizer/scripts/resolvers/apply_re_call.py --file <path>
+# tier0_consumer_list / tier0_sorted_minmax / tier0_literal_membership /
+#   tier0_list_cast / tier0_logging_lazy / tier0_dict_keys /
+#   tier0_async_sleep / tier0_enumerate / tier0_rematch_search /
+#   tier0_except_hoist rows (one applier per tier):
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_consumer.py --file <path>
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_sorted_minmax.py --file <path>
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_membership.py --file <path>
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_list_cast.py --file <path>
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_logging_lazy.py --file <path>
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_dict_keys.py --file <path>
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_async_sleep.py --file <path>
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_enumerate.py --file <path>
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_rematch_search.py --file <path>
+python3 .agents/skills/code-optimizer/scripts/resolvers/apply_try_hoist.py --file <path>
 # add --dry-run first if you want to see the plan before writing
 ```
 
@@ -331,7 +355,8 @@ re-measures, and keeps the rewrite only if the gain clears the margin
 
 ```bash
 python3 .agents/skills/code-optimizer/scripts/apply_and_verify.py --file <path> --func <name>
-# --tier regex_hoist|re_call|perf401|perf402|str_join|sum_reduce (default: auto), --min-improvement (default: 0.10)
+# --tier <any tier short name> (default: auto tries each in priority order),
+#   --min-improvement (default: 0.10)
 ```
 
 This only ever touches assignments where the `re.compile(...)` call doesn't

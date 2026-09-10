@@ -299,3 +299,70 @@ class TestRealWorldShape:
         text = "{a}\nno match\n{b}"
         assert ns["clean_a"](1, text) == ["{a}", "{b}"]
         assert ns["clean_b"](1, text) == ["{a}", "{b}"]
+
+
+class TestScopeShadowing:
+    def test_closure_pattern_is_not_safe(self):
+        # `suffix` is bound in the enclosing function: at import time the
+        # hoisted statement would raise NameError.
+        source = textwrap.dedent(
+            r"""
+            import re
+
+            def outer():
+                suffix = "+"
+
+                def inner(s):
+                    pat = re.compile("a" + suffix)
+                    return pat.search(s)
+
+                return inner
+            """
+        )
+        plan = analyze_source(source)
+        assert plan.safe == []
+
+    def test_param_receiver_is_not_safe(self):
+        source = textwrap.dedent(
+            r"""
+            import re
+
+            def f(re, s):
+                pat = re.compile("a+")
+                return pat.search(s)
+            """
+        )
+        plan = analyze_source(source)
+        assert plan.safe == []
+
+    def test_param_shadowing_hoisted_name_is_not_safe(self):
+        # Deleting the local assignment would leave the call sites reading
+        # the parameter instead of the module global.
+        source = textwrap.dedent(
+            r"""
+            import re
+
+            def f(pat, s):
+                pat = re.compile("a+")
+                return pat.search(s)
+            """
+        )
+        plan = analyze_source(source)
+        assert plan.safe == []
+
+    def test_module_level_pattern_constant_still_fires(self):
+        # A module-bound constant stays hoistable: import-time and
+        # call-time reads resolve to the same object.
+        source = textwrap.dedent(
+            r"""
+            import re
+
+            PREFIX = "a"
+
+            def f(s):
+                pat = re.compile(PREFIX + "+")
+                return pat.search(s)
+            """
+        )
+        plan = analyze_source(source)
+        assert [(c.var_name, c.functions) for c in plan.safe] == [("pat", ["f"])]

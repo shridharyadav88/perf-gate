@@ -13,10 +13,13 @@ verification, and CI regression gates — stdlib only, zero tokens.
 - **Measured heat lane** — `profile_heat.py` ranks functions by cProfile
   cumulative-time share; Review sorts heat-first, reachability second;
   heat-visible dark rows surface as the harness-priority queue
-- **Mechanical tier0 fixes** — 9 deterministic tiers (regex/re-call/
-  accumulator/invariant hoists, PERF401/402/403, str-join/sum/set) applied
-  by `apply_and_verify.py`, kept only if a `perf_counter` min-of-5
-  re-measure clears the 10% margin, else pre-apply bytes restored
+- **Mechanical tier0 fixes** — 19 deterministic tiers (regex/re-call/
+  accumulator/invariant hoists, PERF401/402/403, str-join/sum/set, consumer
+  debracketing, sorted-minmax, literal membership, list-cast drops, lazy
+  logging, dict-keys iteration, async sleep, enumerate, re.search,
+  try/except hoisting) applied by `apply_and_verify.py`, kept only if a
+  `perf_counter` min-of-5 re-measure clears the 10% margin, else pre-apply
+  bytes restored
 - **Quality-gated optimization loop** — refactor → test → re-profile with
   `regression_gate.py` for CI
 

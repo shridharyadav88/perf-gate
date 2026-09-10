@@ -28,7 +28,10 @@ import provenance as provenance_mod  # noqa: E402
 TIER0_PRIORITY = (
     "tier0_regex_hoist", "tier0_re_call", "tier0_perf402", "tier0_perf401",
     "tier0_perf403", "tier0_str_join", "tier0_sum_reduce", "tier0_set_build",
-    "tier0_invariant_hoist",
+    "tier0_invariant_hoist", "tier0_consumer_list", "tier0_sorted_minmax",
+    "tier0_literal_membership", "tier0_list_cast", "tier0_logging_lazy",
+    "tier0_dict_keys", "tier0_async_sleep", "tier0_enumerate",
+    "tier0_rematch_search", "tier0_except_hoist",
 )
 
 # Resolver owning each mechanical tier (points the fixer at the applier).
@@ -42,6 +45,16 @@ TIER0_RESOLVER = {
     "tier0_sum_reduce": "resolvers/apply_accumulator.py",
     "tier0_set_build": "resolvers/apply_accumulator.py",
     "tier0_invariant_hoist": "resolvers/apply_invariant_hoist.py",
+    "tier0_consumer_list": "resolvers/apply_consumer.py",
+    "tier0_sorted_minmax": "resolvers/apply_sorted_minmax.py",
+    "tier0_literal_membership": "resolvers/apply_membership.py",
+    "tier0_list_cast": "resolvers/apply_list_cast.py",
+    "tier0_logging_lazy": "resolvers/apply_logging_lazy.py",
+    "tier0_dict_keys": "resolvers/apply_dict_keys.py",
+    "tier0_async_sleep": "resolvers/apply_async_sleep.py",
+    "tier0_enumerate": "resolvers/apply_enumerate.py",
+    "tier0_rematch_search": "resolvers/apply_rematch_search.py",
+    "tier0_except_hoist": "resolvers/apply_try_hoist.py",
 }
 
 

@@ -159,3 +159,50 @@ class TestLiveLoop:
         assert excinfo.value.code == 1
         assert mod.read_bytes() == before
         assert "ERROR" in capsys.readouterr().out
+
+
+NEW_TIER_FIXTURES = {
+    "consumer_list": "def f(xs):\n    return sum([x * 2 for x in xs])\n",
+    "sorted_minmax": "def f(xs):\n    return sorted(xs)[0]\n",
+    "literal_membership": "def f(m):\n    return m in ['a', 'b', 'c']\n",
+    "list_cast": "def f():\n    for x in list((1, 2)):\n        print(x)\n",
+    "logging_lazy": "import logging\nlog = logging.getLogger('t')\n"
+                    "def f(n):\n    log.debug(f'n={n}')\n",
+    "dict_keys": "def f(d):\n    return [k for k in d.keys()]\n",
+    "async_sleep": "import asyncio\nimport time\n"
+                   "async def f():\n    time.sleep(1)\n",
+    "enumerate": "def f(xs):\n    for i in range(len(xs)):\n        print(i, xs[i])\n",
+    "rematch_search": "import re\ndef f(log):\n"
+                      "    if re.match('.*error', log, re.DOTALL):\n"
+                      "        return True\n    return False\n",
+    "except_hoist": "def f(chunks):\n    for c in chunks:\n"
+                    "        try:\n            print(int(c))\n"
+                    "        except ValueError:\n            raise\n",
+}
+
+
+class TestNewTierDispatch:
+    def test_dry_run_shows_plan_per_tier(self, tmp_path, capsys):
+        for tier, source in NEW_TIER_FIXTURES.items():
+            mod = tmp_path / f"{tier}.py"
+            mod.write_text(source)
+            before = mod.read_bytes()
+            mech_mod.main(["--file", str(mod), "--func", "f",
+                           "--tier", tier, "--dry-run"])
+            out = capsys.readouterr().out
+            assert "would apply" in out, tier
+            assert f"[{tier}]" in out, tier
+            assert mod.read_bytes() == before
+
+    def test_live_consumer_loop_keeps_invariants(self, tmp_path, capsys):
+        mod = tmp_path / "consumer.py"
+        mod.write_text(NEW_TIER_FIXTURES["consumer_list"])
+        before = mod.read_bytes()
+        mech_mod.main(["--file", str(mod), "--func", "f",
+                       "--tier", "consumer_list"])
+        out = capsys.readouterr().out
+        assert "KEPT" in out or "REVERTED" in out
+        if "KEPT" in out:
+            assert b"sum((x * 2 for x in xs))" in mod.read_bytes()
+        else:
+            assert mod.read_bytes() == before

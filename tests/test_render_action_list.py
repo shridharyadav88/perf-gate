@@ -119,6 +119,16 @@ class TestRender:
         assert "1 rows: by design" in report
         assert "1 rows are dark on both profilers" in report
 
+    def test_new_tier0_renders_with_its_resolver(self):
+        rows = [
+            _row(file="m.py", function="total", tier="tier0_consumer_list",
+                 tier_detail="feed sum(...) a generator instead of a list (line 2)",
+                 empirical_big_o="Linear: time = 1e-06 * n (sec)"),
+        ]
+        report = render_mod.render(rows, {}, top=10, provenance={})
+        assert "## Fix now" in report
+        assert "resolvers/apply_consumer.py" in report
+
     def test_tier1_cap_and_overflow_note(self):
         rows = [_row(file="m.py", function=f"f{i}", tier="tier1_review")
                 for i in range(4)]

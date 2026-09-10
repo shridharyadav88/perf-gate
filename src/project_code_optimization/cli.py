@@ -88,8 +88,6 @@ def install_skills(
             source_path = source
         else:
             # importlib.resources < 3.9 compat — traversable
-            import tempfile
-            import os as _os
             source_path = Path(str(source))
 
         # Validate the skill has a SKILL.md before deploying
@@ -104,7 +102,12 @@ def install_skills(
 
         dest = target / name
         if dry_run:
-            action = "force-overwrite" if force else ("replace (with backup)" if dest.exists() and backup else "create")
+            if force:
+                action = "force-overwrite"
+            elif dest.exists() and backup:
+                action = "replace (with backup)"
+            else:
+                action = "create"
             logger.info("[DRY-RUN] Would install '%s' → %s (%s)", name, dest, action)
             installed.append(name)
             continue

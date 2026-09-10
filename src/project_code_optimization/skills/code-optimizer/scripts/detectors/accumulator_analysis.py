@@ -58,8 +58,13 @@ Safety rules (anything ambiguous is skipped, never guessed at):
 from __future__ import annotations
 
 import ast
+import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from detectors import span_dedupe  # noqa: E402
 
 
 @dataclass
@@ -352,6 +357,10 @@ def analyze_source(source: str, filename: str = "<string>") -> AccumulatePlan:
                     plan.safe.append(item)
                 else:
                     plan.skipped.append(item)
+    plan.safe, shadow_skipped = span_dedupe.filter_shadowed(
+        tree, plan.safe, {"sum_reduce": {"sum"}, "set_build": {"set"}},
+        check_module=True)
+    plan.skipped.extend(shadow_skipped)
     plan.safe.sort(key=lambda c: (c.lineno, c.var_name))
     return plan
 

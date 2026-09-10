@@ -35,8 +35,13 @@ Safety rules (anything ambiguous is skipped, never guessed at):
 from __future__ import annotations
 
 import ast
+import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from detectors import span_dedupe  # noqa: E402
 
 # method -> positional parameter names AFTER the pattern (for flag slots).
 METHOD_PARAMS: dict[str, list[str]] = {
@@ -160,6 +165,7 @@ def _find_in_function(
     func_node: ast.FunctionDef | ast.AsyncFunctionDef,
     aliases: dict[str, str],
     taken: set[str],
+    tree: ast.Module,
 ) -> list[ReCallCandidate | tuple[str, str]]:
     out: list[ReCallCandidate | tuple[str, str]] = []
     parent_of: dict[ast.AST, ast.AST] = {}
@@ -181,6 +187,10 @@ def _find_in_function(
         if not isinstance(receiver, ast.Name) or receiver.id not in aliases:
             if isinstance(receiver, ast.Name):
                 out.append((func_node.name, f"'{receiver.id}.{method}' is not the re module"))
+            continue
+        if receiver.id in span_dedupe.chain_blocked(tree, call.lineno or 0):
+            out.append((func_node.name,
+                        f"'{receiver.id}' is rebound in a function scope — not touched"))
             continue
         if not call.args:
             continue
@@ -205,7 +215,8 @@ def _find_in_function(
         base = f"_re_{method}"
         module_name = base
         counter = 2
-        while module_name in taken:
+        scope_blocked = span_dedupe.chain_blocked(tree, call.lineno or 0)
+        while module_name in taken or module_name in scope_blocked:
             module_name = f"{base}_{counter}"
             counter += 1
         taken.add(module_name)
@@ -242,7 +253,7 @@ def analyze_source(source: str, filename: str = "<string>") -> ReCallPlan:
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for item in _find_in_function(node, aliases, taken):
+        for item in _find_in_function(node, aliases, taken, tree):
             if isinstance(item, ReCallCandidate):
                 plan.safe.append(item)
             else:

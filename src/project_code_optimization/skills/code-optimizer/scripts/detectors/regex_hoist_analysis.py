@@ -1,12 +1,14 @@
 """Detect function-local `re.compile(...)` assignments safe to hoist to module scope.
 
-If a `pattern = re.compile(...)` assignment inside a function's body doesn't
-reference any of that function's parameters or other local names, it
-evaluates to the exact same object on every call — recompiling it per call is
-pure waste with zero behavior change. This is a real, measured cost we found
-in crawl4ai's `clean_pdf_text`/`clean_pdf_text_to_html` (see
+The hoisted statement runs at import time, so every name it reads must
+resolve identically there and at each call: pattern names must be bound at
+module level (or be builtins), and neither the `re` receiver nor the hoisted
+variable may be rebound in any function scope enclosing an occurrence.
+This is a real, measured cost we found in crawl4ai's
+`clean_pdf_text`/`clean_pdf_text_to_html` (see
 reports/2026-09-02-pdf-utils-baseline.md) — moving it to module scope is
-always correct, so it's safe to detect and apply without an LLM in the loop.
+correct when the scope rules hold, so it's safe to detect and apply without
+an LLM in the loop.
 
 Detection is pure/read-only (this module never writes a file) so it can be
 shared by `classify_findings.py` (read-only triage) and
@@ -17,8 +19,16 @@ analysis logic.
 from __future__ import annotations
 
 import ast
+import builtins
+import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from detectors import span_dedupe  # noqa: E402
+
+_SAFE_BUILTINS = frozenset(dir(builtins))
 
 
 @dataclass
@@ -48,30 +58,35 @@ def _is_re_compile_call(call: ast.Call) -> bool:
     )
 
 
-def _function_dependent_names(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
-    """Names that vary call-to-call: parameters, and anything the function assigns."""
-    names: set[str] = set()
-    args = func_node.args
-    for group in (args.posonlyargs, args.args, args.kwonlyargs):
-        names.update(a.arg for a in group)
-    if args.vararg:
-        names.add(args.vararg.arg)
-    if args.kwarg:
-        names.add(args.kwarg.arg)
-    for node in ast.walk(func_node):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    names.add(target.id)
+def _module_re_ok(tree: ast.Module) -> bool:
+    """True when a top-level ``import re`` binds ``re`` and nothing else does.
+
+    The hoisted statement evaluates ``re.compile`` at import time, so the
+    module-global ``re`` must be the real module — any other top-level
+    binding (assign/def/from-import) voids the proof.
+    """
+    imported = False
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "re" and alias.asname in (None, "re"):
+                    imported = True
+                elif (alias.asname or alias.name.split(".")[0]) == "re":
+                    return False
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == "re":
+                return False
+        elif isinstance(node, ast.Assign):
+            if any(isinstance(t, ast.Name) and t.id == "re" for t in node.targets):
+                return False
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            names.add(node.target.id)
-        elif isinstance(node, ast.For) and isinstance(node.target, ast.Name):
-            names.add(node.target.id)
-        elif isinstance(node, ast.NamedExpr) and isinstance(node.target, ast.Name):
-            names.add(node.target.id)
-        elif isinstance(node, ast.withitem) and isinstance(node.optional_vars, ast.Name):
-            names.add(node.optional_vars.id)
-    return names
+            if node.target.id == "re":
+                return False
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if (alias.asname or alias.name) == "re":
+                    return False
+    return imported
 
 
 def _dedent_statement(segment: str, indent: int) -> str:
@@ -84,14 +99,17 @@ def _dedent_statement(segment: str, indent: int) -> str:
 
 def find_hoist_candidates_in_function(
     func_node: ast.FunctionDef | ast.AsyncFunctionDef, source_lines: list[str],
+    module_names: set[str], tree: ast.Module,
 ) -> list[HoistCandidate]:
-    """Find hoistable `re.compile(...)` assignments directly in *func_node*'s body.
+    """Find hoistable `re.compile(...)` assignments in *func_node*'s subtree.
 
-    Nested function defs are walked too (their own params count as dependent
-    only for themselves), matching how Python scoping actually works.
+    The hoisted statement runs at import time: pattern names must already
+    be bound there (module level or builtins), and neither the ``re``
+    receiver nor the hoisted variable may be rebound in any function scope
+    enclosing the occurrence — a shadowing binding would change which
+    object the hoisted code, or the call sites left behind, reads.
     """
-    dependent = _function_dependent_names(func_node)
-    found = []
+    raw: list = []
     for node in ast.walk(func_node):
         if not isinstance(node, ast.Assign) or len(node.targets) != 1:
             continue
@@ -103,8 +121,23 @@ def find_hoist_candidates_in_function(
             continue
         referenced = {n.id for n in ast.walk(call) if isinstance(n, ast.Name)}
         referenced.discard("re")
-        if referenced & dependent:
-            continue  # depends on a parameter/local — not safe to hoist
+        if referenced - module_names - _SAFE_BUILTINS:
+            continue  # import time cannot see these names — not safe to hoist
+        raw.append((node, target, referenced))
+    same_var_assigns: dict[str, list] = {}
+    for node, target, _referenced in raw:
+        same_var_assigns.setdefault(target.id, []).append(node)
+    found = []
+    for node, target, referenced in raw:
+        # The hoisted assignments themselves are deleted by the rewrite,
+        # so their own bindings must not count as shadowing the name.
+        skip = set()
+        for assign_node in same_var_assigns[target.id]:
+            for child in ast.walk(assign_node):
+                skip.add(id(child))
+        chain = span_dedupe.chain_blocked(tree, node.lineno, frozenset(skip))
+        if "re" in chain or (referenced & chain) or target.id in chain:
+            continue  # a function scope rebinds a hoisted name — not safe
         segment = "\n".join(source_lines[node.lineno - 1 : node.end_lineno])
         found.append(
             HoistCandidate(
@@ -138,7 +171,8 @@ def analyze_source(source: str, filename: str = "<string>") -> HoistPlan:
     by_name: dict[str, list[HoistCandidate]] = {}
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for cand in find_hoist_candidates_in_function(node, source_lines):
+            for cand in find_hoist_candidates_in_function(
+                    node, source_lines, module_names, tree):
                 by_name.setdefault(cand.var_name, []).append(cand)
 
     safe: list[HoistCandidate] = []
@@ -159,6 +193,11 @@ def analyze_source(source: str, filename: str = "<string>") -> HoistPlan:
                 occurrences=[c.occurrences[0] for c in cands],
             )
         )
+    if not _module_re_ok(tree):
+        for cand in safe:
+            skipped.append((cand.var_name,
+                            "'re' is not the re module at import time — not touched"))
+        safe = []
     return HoistPlan(safe=safe, skipped=skipped)
 
 

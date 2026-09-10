@@ -353,3 +353,40 @@ class TestClassifyTiers:
         assert rows[1]["tier"] == "tier0_sum_reduce"
         assert rows[2]["tier"] == "tier0_set_build"
         assert "set(...)" in rows[2]["tier_detail"]
+
+
+class TestScopeShadowing:
+    def test_module_sum_rebind_skipped(self):
+        plan = analyze_source(textwrap.dedent("""\
+            sum = 5
+
+
+            def total(xs):
+                s = 0
+                for x in xs:
+                    s += x
+                return s
+            """))
+        assert plan.safe == []
+        assert any("this module" in reason for _, reason in plan.skipped)
+
+    def test_param_sum_skipped(self):
+        plan = analyze_source(textwrap.dedent("""\
+            def total(xs, sum):
+                s = 0
+                for x in xs:
+                    s += x
+                return s
+            """))
+        assert plan.safe == []
+        assert any("function scope" in reason for _, reason in plan.skipped)
+
+    def test_param_set_skipped(self):
+        plan = analyze_source(textwrap.dedent("""\
+            def f(xs, set):
+                out = set()
+                for x in xs:
+                    out.add(x)
+                return out
+            """))
+        assert plan.safe == []

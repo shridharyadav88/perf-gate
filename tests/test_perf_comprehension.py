@@ -511,3 +511,26 @@ class TestClassifyTiers:
         assert rows[0]["tier"] == "tier0_perf401"
         assert "for row in matrix for x in row" in rows[0]["tier_detail"] or \
             "comprehension" in rows[0]["tier_detail"]
+
+
+class TestScopeShadowing:
+    def test_param_list_skipped(self):
+        plan = analyze_source(textwrap.dedent("""\
+            def f(items, list):
+                out = []
+                for it in items:
+                    out.append(it)
+                return out
+            """))
+        assert plan.safe == []
+        assert any("function scope" in reason for _, reason in plan.skipped)
+
+    def test_param_dict_skipped(self):
+        plan = analyze_source(textwrap.dedent("""\
+            def f(pairs, dict):
+                out = {}
+                for k, v in pairs:
+                    out[k] = v
+                return out
+            """))
+        assert plan.safe == []

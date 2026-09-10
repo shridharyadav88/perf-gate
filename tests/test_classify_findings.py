@@ -208,3 +208,71 @@ class TestCLI:
         reader = csv.DictReader(io.StringIO(body))
         rows = list(reader)
         assert rows[0]["tier"] == "tier1_review"
+
+
+class TestNewTier0Detection:
+    def _route(self, tmp_path: Path, source: str, func: str = "f") -> dict:
+        mod = _write(tmp_path, "mod.py", source)
+        row = _base_row(file=str(mod), function=func)
+        classify_rows([row])
+        return row
+
+    def test_consumer_list(self, tmp_path: Path):
+        row = self._route(tmp_path, "def f(xs):\n    return sum([x * 2 for x in xs])\n")
+        assert row["tier"] == "tier0_consumer_list"
+
+    def test_sorted_minmax(self, tmp_path: Path):
+        row = self._route(tmp_path, "def f(xs):\n    return sorted(xs)[0]\n")
+        assert row["tier"] == "tier0_sorted_minmax"
+
+    def test_literal_membership(self, tmp_path: Path):
+        row = self._route(
+            tmp_path, "def f(m):\n    return m in ['a', 'b', 'c']\n")
+        assert row["tier"] == "tier0_literal_membership"
+
+    def test_list_cast(self, tmp_path: Path):
+        row = self._route(
+            tmp_path, "def f():\n    for x in list((1, 2)):\n        print(x)\n")
+        assert row["tier"] == "tier0_list_cast"
+
+    def test_logging_lazy(self, tmp_path: Path):
+        row = self._route(
+            tmp_path,
+            "import logging\nlog = logging.getLogger('t')\n"
+            "def f(n):\n    log.debug(f'n={n}')\n")
+        assert row["tier"] == "tier0_logging_lazy"
+
+    def test_dict_keys(self, tmp_path: Path):
+        row = self._route(
+            tmp_path, "def f(d):\n    return [k for k in d.keys()]\n")
+        assert row["tier"] == "tier0_dict_keys"
+
+    def test_async_sleep(self, tmp_path: Path):
+        row = self._route(
+            tmp_path,
+            "import asyncio\nimport time\n"
+            "async def f():\n    time.sleep(1)\n", func="f")
+        assert row["tier"] == "tier0_async_sleep"
+
+    def test_enumerate(self, tmp_path: Path):
+        row = self._route(
+            tmp_path,
+            "def f(xs):\n    for i in range(len(xs)):\n"
+            "        print(i, xs[i])\n")
+        assert row["tier"] == "tier0_enumerate"
+
+    def test_rematch_search(self, tmp_path: Path):
+        row = self._route(
+            tmp_path,
+            "import re\ndef f(log):\n"
+            "    if re.match('.*error', log, re.DOTALL):\n"
+            "        return True\n    return False\n")
+        assert row["tier"] == "tier0_rematch_search"
+
+    def test_except_hoist(self, tmp_path: Path):
+        row = self._route(
+            tmp_path,
+            "def f(chunks):\n    for c in chunks:\n"
+            "        try:\n            print(int(c))\n"
+            "        except ValueError:\n            raise\n")
+        assert row["tier"] == "tier0_except_hoist"

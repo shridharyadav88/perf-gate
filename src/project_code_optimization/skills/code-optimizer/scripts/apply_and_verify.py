@@ -24,6 +24,18 @@ from detectors import (  # noqa: E402
     accumulator_analysis as acc_analysis,
 )
 from detectors import (
+    async_sleep_analysis,
+    consumer_analysis,
+    dict_keys_analysis,
+    enumerate_analysis,
+    list_cast_analysis,
+    logging_lazy_analysis,
+    membership_analysis,
+    rematch_search_analysis,
+    sorted_minmax_analysis,
+    try_hoist_analysis,
+)
+from detectors import (
     invariant_hoist_analysis as inv_analysis,
 )
 from detectors import (
@@ -40,6 +52,18 @@ from resolvers import (  # noqa: E402
     apply_accumulator as apply_acc,
 )
 from resolvers import (
+    apply_async_sleep,
+    apply_consumer,
+    apply_dict_keys,
+    apply_enumerate,
+    apply_list_cast,
+    apply_logging_lazy,
+    apply_membership,
+    apply_rematch_search,
+    apply_sorted_minmax,
+    apply_try_hoist,
+)
+from resolvers import (
     apply_invariant_hoist as apply_inv,
 )
 from resolvers import (
@@ -53,7 +77,36 @@ from resolvers import (
 )
 
 TIERS = ("regex_hoist", "re_call", "perf401", "perf402", "perf403", "str_join",
-         "sum_reduce", "set_build", "invariant_hoist")
+         "sum_reduce", "set_build", "invariant_hoist", "consumer_list",
+         "sorted_minmax", "literal_membership", "list_cast", "logging_lazy",
+         "dict_keys", "async_sleep", "enumerate", "rematch_search",
+         "except_hoist")
+
+# Span-edit tiers: short tier -> (analysis module, plan class,
+# apply module, apply function name). One table drives _analyze/_verify/
+# _apply/_filter_plan so ten tiers don't need fifty branches.
+_NEW_TIER_MODULES = {
+    "consumer_list": (consumer_analysis, consumer_analysis.ConsumerPlan,
+                      apply_consumer, "apply_consumers"),
+    "sorted_minmax": (sorted_minmax_analysis, sorted_minmax_analysis.SortedMinmaxPlan,
+                      apply_sorted_minmax, "apply_sorted_minmax"),
+    "literal_membership": (membership_analysis, membership_analysis.MembershipPlan,
+                           apply_membership, "apply_memberships"),
+    "list_cast": (list_cast_analysis, list_cast_analysis.ListCastPlan,
+                  apply_list_cast, "apply_list_cast"),
+    "logging_lazy": (logging_lazy_analysis, logging_lazy_analysis.LoggingLazyPlan,
+                     apply_logging_lazy, "apply_logging_lazy"),
+    "dict_keys": (dict_keys_analysis, dict_keys_analysis.DictKeysPlan,
+                  apply_dict_keys, "apply_dict_keys"),
+    "async_sleep": (async_sleep_analysis, async_sleep_analysis.AsyncSleepPlan,
+                    apply_async_sleep, "apply_async_sleep"),
+    "enumerate": (enumerate_analysis, enumerate_analysis.EnumeratePlan,
+                  apply_enumerate, "apply_enumerates"),
+    "rematch_search": (rematch_search_analysis, rematch_search_analysis.RematchSearchPlan,
+                       apply_rematch_search, "apply_rematch_search"),
+    "except_hoist": (try_hoist_analysis, try_hoist_analysis.TryHoistPlan,
+                     apply_try_hoist, "apply_try_hoists"),
+}
 
 
 ACC_TIERS = ("str_join", "sum_reduce", "set_build")
@@ -82,6 +135,10 @@ def _filter_plan(tier: str, plan, func_name: str):
     if tier == "invariant_hoist":
         kept = [c for c in plan.safe if c.func_name == func_name]
         return inv_analysis.HoistPlan(safe=kept, skipped=[])
+    if tier in _NEW_TIER_MODULES:
+        _, plan_cls, _, _ = _NEW_TIER_MODULES[tier]
+        kept = [c for c in plan.safe if c.func_name == func_name]
+        return plan_cls(safe=kept, skipped=[])
     kept = [c for c in plan.safe if c.func_name == func_name and c.kind == tier]
     return perf_analysis.RewritePlan(safe=kept, skipped=[])
 
@@ -93,6 +150,8 @@ def _describe(tier: str, subplan) -> str:
         return ", ".join(f"hoist {c.method} call at line {c.lineno}" for c in subplan.safe)
     if tier == "invariant_hoist":
         return ", ".join(f"hoist '{c.name}' to '{c.alias}'" for c in subplan.safe)
+    if tier in _NEW_TIER_MODULES:
+        return "; ".join(c.detail for c in subplan.safe)
     return ", ".join(f"collapse '{c.var_name}' ({c.kind})" for c in subplan.safe)
 
 
@@ -127,6 +186,9 @@ def _analyze(tier: str, source: str, filename: str):
         return inv_analysis.analyze_source(source, filename=filename)
     if tier in ACC_TIERS:
         return acc_analysis.analyze_source(source, filename=filename)
+    if tier in _NEW_TIER_MODULES:
+        analysis_mod, _, _, _ = _NEW_TIER_MODULES[tier]
+        return analysis_mod.analyze_source(source, filename=filename)
     return perf_analysis.analyze_source(source, filename=filename)
 
 
@@ -139,6 +201,9 @@ def _verify(tier: str, source: str, subplan) -> list[str]:
         return apply_inv.verify_plan(source, subplan)
     if tier in ACC_TIERS:
         return apply_acc.verify_plan(source, subplan)
+    if tier in _NEW_TIER_MODULES:
+        _, _, apply_mod, _ = _NEW_TIER_MODULES[tier]
+        return apply_mod.verify_plan(source, subplan)
     return apply_perf.verify_plan(source, subplan)
 
 
@@ -151,6 +216,9 @@ def _apply(tier: str, source: str, subplan) -> str:
         return apply_inv.apply_hoists(source, subplan)
     if tier in ACC_TIERS:
         return apply_acc.apply_accumulates(source, subplan)
+    if tier in _NEW_TIER_MODULES:
+        _, _, apply_mod, func_name = _NEW_TIER_MODULES[tier]
+        return getattr(apply_mod, func_name)(source, subplan)
     return apply_perf.apply_rewrites(source, subplan)
 
 
@@ -267,8 +335,17 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Error: cannot read file: {exc}", file=sys.stderr)
         sys.exit(1)
     except (apply_hoist.PlanMismatchError, apply_perf.PlanMismatchError,
-            apply_acc.PlanMismatchError,
-            apply_recall.PlanMismatchError) as exc:
+            apply_acc.PlanMismatchError, apply_inv.PlanMismatchError,
+            apply_recall.PlanMismatchError, apply_consumer.PlanMismatchError,
+            apply_sorted_minmax.PlanMismatchError,
+            apply_membership.PlanMismatchError,
+            apply_list_cast.PlanMismatchError,
+            apply_logging_lazy.PlanMismatchError,
+            apply_dict_keys.PlanMismatchError,
+            apply_async_sleep.PlanMismatchError,
+            apply_enumerate.PlanMismatchError,
+            apply_rematch_search.PlanMismatchError,
+            apply_try_hoist.PlanMismatchError) as exc:
         print(f"Error: {exc} -- file untouched", file=sys.stderr)
         sys.exit(1)
     print("\n".join(lines))

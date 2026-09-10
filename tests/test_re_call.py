@@ -173,3 +173,30 @@ class TestClassifyTiers:
         ]
         cf.classify_rows(rows)
         assert rows[0]["tier"] == "tier0_re_call"
+
+
+class TestScopeShadowing:
+    def test_closure_re_param_skipped(self):
+        plan = analyze_source(textwrap.dedent("""\
+            import re
+
+
+            def outer(re):
+                def inner(s):
+                    return re.sub("a", "b", s)
+                return inner
+            """))
+        assert plan.safe == []
+        assert any("function scope" in reason for _, reason in plan.skipped)
+
+    def test_local_name_collision_renames_hoist(self):
+        # A function-local _re_sub must not capture the call site: the
+        # hoisted name is suffixed instead, and the fix is preserved.
+        plan = analyze_source(textwrap.dedent("""\
+            import re
+
+
+            def f(s, _re_sub):
+                return re.sub("a", "b", s)
+            """))
+        assert [(c.func_name, c.module_name) for c in plan.safe] == [("f", "_re_sub_2")]
